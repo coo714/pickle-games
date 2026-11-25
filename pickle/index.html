@@ -50,7 +50,7 @@ function resize() {
   CX = W / 2;
   HORIZON = Math.round(H * 0.135);
   PLAYER_Y = Math.round(H * 0.895);
-  ROAD_HALF = W * 0.50;
+  ROAD_HALF = Math.min(W * 0.50, H * 0.235);
 }
 
 const Z_POW = 1.65; // 원거리 압축(레퍼런스처럼 먼 곳이 넓게 보이도록)
@@ -832,6 +832,7 @@ function updateEntities(dt) {
     if (e.flash > 0) e.flash -= dt;
     if (e.popT > 0) e.popT -= dt;
     if (e.sq > 0) e.sq = Math.max(0, e.sq - dt * 6.5);
+    if (e.kind === 'barrel') e.rot += dt * 1.5;
 
     if (e.dmgAcc >= 0.6 && e.popT <= 0) {
       addPopup(e.x, e.z + 1.4, '-' + Math.max(1, Math.round(e.dmgAcc)),
@@ -2821,14 +2822,16 @@ function drawStart() {
 
   // 티어 사다리
   const ladderY = H * 0.40;
-  const xs = [W * 0.17, W * 0.39, W * 0.61, W * 0.83];
+  const cardW = Math.min(W * 0.86, 380);
+  const cardX = CX - cardW / 2;
+  const xs = [0, 1, 2, 3].map(function (i) { return cardX + cardW * (0.135 + i * 0.243); });
   const tiers = [0, 1, 2, 3];
   const names = ['소총병', '형님', '바이크', '지프'];
   ctx.fillStyle = 'rgba(7,13,22,0.74)';
-  rr(W * 0.07, ladderY - 68, W * 0.86, 110, 14); ctx.fill();
+  rr(cardX, ladderY - 68, cardW, 110, 14); ctx.fill();
   ctx.strokeStyle = 'rgba(110,190,255,0.24)';
   ctx.lineWidth = 1.2;
-  rr(W * 0.07, ladderY - 68, W * 0.86, 110, 14); ctx.stroke();
+  rr(cardX, ladderY - 68, cardW, 110, 14); ctx.stroke();
 
   for (let i = 0; i < 4; i++) {
     drawUnitTier(tiers[i], xs[i], ladderY + 16, 0.72, { ph: G.t * 4 + i, muzzle: 0, recoil: 0 });
