@@ -556,7 +556,7 @@ function damageEntity(e, amt, bx) {
       addPopup(e.x, e.z + 2, '+4 병력', '#7ef0ff', Math.max(15, 24 * p.s), true, 104);
       if (!big) addPopup(e.x, e.z + 7, '💥', '#ffd76a', 30, false, 150);
       sfx.breakCrate(big);
-      vibrate(big ? [20, 15, 45] : [12, 8, 20]);
+      vibrate(big ? [20, 15, 45] : [15, 10, 25]);
       G.unitPulse = 0.5;
       if (e.sp) spawnSpecial(e.sp, e.x, e.z);
     } else {
