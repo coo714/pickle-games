@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>개인정보처리방침 — 검색량 가로바 (네이버 연관 키워드 검색량)</title>
+<meta name="description" content="크롬 확장 프로그램 「검색량 가로바」(네이버 연관 키워드 검색량)의 개인정보처리방침. Privacy policy for the Search Volume Bar Chrome extension.">
+<meta name="robots" content="index, follow">
+<style>
+  :root{
+    --bg:#ffffff;
+    --fg:#1f2328;
+    --muted:#5b636d;
+    --line:#e3e6ea;
+    --accent:#0a7c42;
+    --accent-soft:#eaf6ef;
+    --code-bg:#f3f5f7;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#14171a;
+      --fg:#e8eaed;
+      --muted:#a1a8b0;
+      --line:#2c3136;
+      --accent:#5cc98d;
+      --accent-soft:#1b2b22;
+      --code-bg:#22262a;
+    }
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR","Segoe UI",Roboto,sans-serif;
+    font-size:17px;
+    line-height:1.75;
+    word-break:keep-all;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:28px 20px 72px}
+  header{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:34px}
+  .badge{
+    display:inline-block;
+    font-size:13px;
+    font-weight:600;
+    letter-spacing:.01em;
+    color:var(--accent);
+    background:var(--accent-soft);
+    border-radius:999px;
+    padding:4px 12px;
+    margin-bottom:14px;
+  }
+  h1{font-size:1.6rem;line-height:1.35;margin:0 0 12px;letter-spacing:-.01em}
+  .meta{color:var(--muted);font-size:.92rem;margin:0}
+  .lede{margin:18px 0 0;font-size:1rem}
+  h2{
+    font-size:1.16rem;
+    letter-spacing:-.01em;
+    margin:40px 0 12px;
+    padding-left:12px;
+    border-left:4px solid var(--accent);
+    line-height:1.4;
+  }
+  p{margin:0 0 14px}
+  ul{margin:0 0 16px;padding-left:22px}
+  li{margin:0 0 8px}
+  strong{font-weight:700}
+  code{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:.88em;
+    background:var(--code-bg);
+    border-radius:4px;
+    padding:1px 5px;
+    word-break:break-all;
+  }
+  .table-scroll{overflow-x:auto;margin:18px 0 22px;-webkit-overflow-scrolling:touch}
+  table{border-collapse:collapse;width:100%;min-width:540px;font-size:.95rem}
+  th,td{border:1px solid var(--line);padding:11px 13px;text-align:left;vertical-align:top}
+  th{background:var(--code-bg);font-weight:600;white-space:nowrap}
+  td:first-child{width:34%}
+  hr{border:0;border-top:1px solid var(--line);margin:44px 0 30px}
+  .contact{
+    background:var(--accent-soft);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:16px 18px;
+    margin:16px 0 0;
+  }
+  .contact p{margin:0 0 6px}
+  .contact p:last-child{margin-bottom:0}
+  a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+  a:hover{text-decoration:none}
+  .en h2{border-left-color:var(--muted)}
+  .en ul{list-style:none;padding-left:0}
+  .en li{padding-left:16px;position:relative}
+  .en li::before{content:"•";position:absolute;left:0;color:var(--accent)}
+  footer{margin-top:48px;padding-top:22px;border-top:1px solid var(--line);color:var(--muted);font-size:.88rem}
+  @media (max-width:520px){
+    body{font-size:16px}
+    .wrap{padding:22px 16px 56px}
+    h1{font-size:1.34rem}
+    h2{font-size:1.08rem}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <span class="badge">Chrome 확장 프로그램 개인정보처리방침</span>
+  <h1>검색량 가로바 — 개인정보처리방침</h1>
+  <p class="meta">최종 수정일: 2026년 11월 27일 · 적용 버전: 1.1.0 이상</p>
+  <p class="lede">「검색량 가로바」(Chrome 확장 프로그램, 이하 "확장")는 이용자의 개인정보를 소중히 다루며, 아래와 같이 처리 방침을 밝힙니다. 이 확장은 <strong>네이버(주)와 무관한 비공식 도구</strong>입니다.</p>
+</header>
+
+<main>
+
+<h2>1. 수집·이용하는 정보</h2>
+<p>확장은 다음 정보만 취급합니다.</p>
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr><th>정보</th><th>취급 방식</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>네이버 검색광고 API 키 3종<br>(Customer ID · API Key · Secret Key)</td>
+      <td>이용자가 확장 팝업에서 직접 입력한 값. <strong>이용자의 크롬 계정 동기화 저장소(<code>chrome.storage.sync</code>)에만 저장</strong>되며, 검색량 조회 시 네이버 검색광고 API로 전송됩니다.</td>
+    </tr>
+    <tr>
+      <td>카드 접기/펼치기 상태</td>
+      <td>같은 동기화 저장소에 저장되는 화면 설정값(개인 식별 정보 아님).</td>
+    </tr>
+    <tr>
+      <td>검색어</td>
+      <td>이용자가 네이버에 이미 입력한 값으로, 현재 페이지 주소에서 읽어 화면에 표시하고 검색량 조회에 사용할 뿐 <strong>저장하지 않습니다</strong>.</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+<p>확장은 위 정보 외에 이름·이메일·전화번호·주소·위치·방문 기록·검색 기록·쿠키 등을 수집하지 않습니다.</p>
+
+<h2>2. 보관 위치와 보관 기간</h2>
+<ul>
+  <li>API 키와 화면 설정은 <strong>이용자의 브라우저 저장소(크롬 계정 동기화 저장소)</strong>에만 보관됩니다. 개발자는 이 값에 접근할 수 없습니다.</li>
+  <li>보관 기간은 <strong>이용자가 직접 지우거나 확장을 삭제할 때까지</strong>입니다. 팝업에서 키를 새로 저장하면 이전 값은 덮어써지고, 확장을 삭제하면 저장된 값도 함께 삭제됩니다.</li>
+  <li>검색량 조회 결과는 확장의 메모리에만 30분간 임시 보관되며, 브라우저를 닫거나 확장이 다시 시작되면 사라집니다. 디스크에 저장하지 않습니다.</li>
+</ul>
+
+<h2>3. 전송과 제3자 제공</h2>
+<ul>
+  <li>API 키와 검색어는 <strong>검색량 조회를 위해서만 네이버 검색광고 API(<code>https://api.searchad.naver.com</code>)와 네이버 자동완성(<code>https://ac.search.naver.com</code>)으로</strong> 전송됩니다. 두 요청 모두 이용자의 브라우저에서 네이버로 직접 나가며, 개발자의 서버나 중간 서버를 거치지 않습니다.</li>
+  <li>개발자는 이용자의 정보를 <strong>수집·열람·저장하지 않으며, 제3자에게 판매·공유·이전하지 않습니다.</strong> 광고나 프로파일링에 사용하지 않습니다.</li>
+  <li>전송 구간은 모두 HTTPS로 암호화됩니다.</li>
+</ul>
+
+<h2>4. 이용자의 권리</h2>
+<ul>
+  <li>팝업에서 API 키를 새 값으로 바꾸거나 지울 수 있습니다.</li>
+  <li>확장을 삭제하면 저장된 모든 값(동기화 저장소 포함)이 삭제됩니다.</li>
+  <li>크롬의 '계정 동기화' 설정에서 동기화를 끄면 값은 해당 기기에만 보관됩니다.</li>
+</ul>
+
+<h2>5. 아동의 개인정보</h2>
+<p>확장은 만 14세 미만 아동을 대상으로 하지 않으며, 아동의 개인정보를 별도로 수집하지 않습니다.</p>
+
+<h2>6. 방침의 변경</h2>
+<p>이 방침이 바뀌면 이 페이지에 변경 내용과 시행일을 함께 게시합니다. 중요한 변경이 있는 경우 확장 업데이트 안내에 함께 표시합니다.</p>
+
+<h2>7. 문의</h2>
+<p>개인정보 처리에 관한 문의는 아래로 보내 주세요.</p>
+<div class="contact">
+  <p>이메일: <a href="mailto:dcj5026@gmail.com">dcj5026@gmail.com</a></p>
+  <p>개발자: 크롬 웹스토어 「검색량 가로바」 게시자</p>
+</div>
+
+<hr>
+
+<section class="en" lang="en">
+  <h2>English summary</h2>
+  <p><strong>Search Volume Bar — Privacy Policy</strong> (last updated 2026-11-27)</p>
+  <ul>
+    <li><strong>What we handle</strong>: the NAVER Search Ad API credentials you type into the popup (Customer ID, API Key, Secret Key) and the card's collapsed state. Both are stored <strong>only in your own <code>chrome.storage.sync</code></strong>, so they follow your Chrome profile; the developer cannot read them.</li>
+    <li><strong>Where it goes</strong>: your credentials and the search query are sent <strong>only</strong> to <code>api.searchad.naver.com</code> and <code>ac.search.naver.com</code> to fetch search volumes, directly from your browser over HTTPS. There is no developer server.</li>
+    <li><strong>No collection, no sharing</strong>: the developer does not collect, store, sell, or share your data, and does not use it for advertising or profiling. Search results are cached in memory for 30 minutes and never written to disk.</li>
+    <li><strong>Your control</strong>: you can overwrite or clear the keys in the popup, and uninstalling the extension deletes all stored values.</li>
+    <li><strong>Contact</strong>: <a href="mailto:dcj5026@gmail.com">dcj5026@gmail.com</a></li>
+  </ul>
+  <p>This extension is an unofficial tool and is not affiliated with or endorsed by NAVER Corp.</p>
+</section>
+
+<footer>
+  「검색량 가로바」는 네이버(주)와 무관한 비공식 도구입니다. · 이 페이지는 크롬 웹스토어 제출용 개인정보처리방침입니다.
+</footer>
+
+</main>
+</div>
+</body>
+</html>
