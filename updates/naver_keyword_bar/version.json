@@ -1,9 +1,9 @@
 {
   "version": "2.1.0",
   "name": "네이버 연관 키워드 검색량",
-  "download_url": "https://coo714.github.io/pickle-games/updates/naver_keyword_bar/naver-keyword-bar-v2.zip",
-  "sha256": "7f733fe7ba8f10e71233991d63ad90cb27a80755f178d89ca5158971b77008ba",
-  "size": 33760,
+  "download_url": "https://coo714.github.io/pickle-games/updates/naver_keyword_bar/네이버_연관검색어_검색량.zip",
+  "sha256": "fba670d614e6b4e06c62a9bea706657c0d5de4f2e2ed15c4b8cb4787fe5bdc6b",
+  "size": 35126,
   "released": "2026-11-28",
-  "notes": "팝업에 버전 표시·업데이트 확인·새 버전 알림 추가\n· 팝업 하단 v2.1.0 + [업데이트 확인]\n· 새 버전이 있으면 파란 배너 + [최신 파일 받기]\n· version.json만 읽는 방식 (원격 JS 실행 없음)"
+  "notes": "한국어 파일명·한국어 폴더로 재포장 (압축을 풀면 네이버_연관검색어_검색량 폴더 안에 확장 파일이 들어 있습니다)\n· 팝업 하단 v2.1.0 + [업데이트 확인]\n· 새 버전이 있으면 파란 배너 + [최신 파일 받기]\n· version.json만 읽는 방식 (원격 JS 실행 없음)"
 }
