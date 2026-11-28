@@ -1,7 +1,7 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "app_url": "https://coo714.github.io/pickle-games/updates/discord_auto_voice_pro/app.py",
-  "sha256": "01f9ae61444de9ae80c5cfde69525908b13dbebb64024c3abb1cf5012c777d74",
+  "sha256": "273c5e571ce5badc76cd4fad6d7bbe1e2a027b11e42c0985f47216a6b83602ab",
   "released": "2026-11-28",
-  "notes": "· [롤 자동 찾기] / [롤체 자동 찾기] 원클릭 버튼 추가\n· 입장할 때 게임도 함께 실행 (검은 콘솔 창 없이)\n· 원클릭 업데이트 (SHA-256 검증 · 사용자가 누를 때만 교체)"
+  "notes": "개인정보(특정인 이름) 제거 및 범용 PRO 에디션 적용"
 }

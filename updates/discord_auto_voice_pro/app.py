@@ -37,7 +37,7 @@ from urllib.request import Request, urlopen
 
 APP_TITLE = "디스코드 음성방 자동 입장 PRO"
 APP_SUBTITLE = "Discord Auto Voice Pro"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 APP_DIR_NAME = "DiscordAutoVoice"
 CONFIG_FILENAME = "config.json"
 STARTUP_FILENAME = "DiscordAutoVoice.vbs"
@@ -1567,7 +1567,7 @@ class ProApp:
 
         badge = tk.Frame(right, bg=COLOR_BLURPLE)
         badge.pack(side="right", padx=(10, 0))
-        tk.Label(badge, text="홍준영님 커스텀 에디션", bg=COLOR_BLURPLE, fg="#FFFFFF",
+        tk.Label(badge, text="PRO 에디션", bg=COLOR_BLURPLE, fg="#FFFFFF",
                  font=self.font_badge, padx=10, pady=4).pack()
 
         status = tk.Frame(right, bg=COLOR_HEADER)
