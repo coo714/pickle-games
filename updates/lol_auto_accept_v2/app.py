@@ -932,7 +932,10 @@ class AutoAcceptApp(tk.Tk):
 
     def _resize_for_banner(self, visible):
         """배너가 붙으면 창 높이를 그만큼 늘려 내용이 가려지지 않게 한다."""
-        x, y = getattr(self, "_pos", (100, 100))
+        try:
+            x, y = self.winfo_x(), self.winfo_y()
+        except Exception:
+            x, y = getattr(self, "_pos", (100, 100))
         height = HEIGHT + (BANNER_H if visible else 0)
         try:
             self.geometry("{}x{}+{}+{}".format(WIDTH, height, x, y))

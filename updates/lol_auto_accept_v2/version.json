@@ -2,7 +2,7 @@
   "version": "2.1.0",
   "url": "https://coo714.github.io/pickle-games/updates/lol_auto_accept_v2/app.py",
   "app_url": "https://coo714.github.io/pickle-games/updates/lol_auto_accept_v2/app.py",
-  "sha256": "775c72451b0d6dcb4f0d0ee6b7415396170530230f4ceb974f4c6dbcac935c7f",
+  "sha256": "60cc1ea5adb39f1399895cd09bc1209e3771680c4ed7023bfc2feaad93fe7ba6",
   "released": "2026-11-28",
   "notes": "· 화면 아래에 버전(v2.1.0)과 [업데이트 확인] 버튼 추가\n· 새 버전이 있으면 위쪽 파란 배너로 알림 (누를 때만 교체)\n· SHA-256 + 문법 검사를 통과할 때만 백업 후 교체·재시작"
 }
