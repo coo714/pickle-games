@@ -5,10 +5,12 @@
   'use strict';
 
   const R = window.CardNewsRender;
+  const X = window.CardNewsExtract;          // 주소(URL) → 본문 추출 (extract.js)
   const SAVE_KEY = 'cardnews_maker_v1';
 
   const state = {
     source: '',
+    url: '',                // 마지막으로 불러온 주소
     ratio: '4:5',
     target: 0,              // 0 = 자동, 5/6/7 = 전체 장 수
     handle: '@your_id',
@@ -453,6 +455,94 @@
   }
 
   /* =====================================================================
+     주소(URL)로 본문 불러오기
+     ===================================================================== */
+  let fetchSeq = 0;
+
+  function setFetchBusy(on) {
+    const btn = $('#fetchBtn');
+    if (!btn) return;
+    btn.disabled = on;
+    btn.classList.toggle('busy', on);
+    btn.textContent = on ? '불러오는 중' : '불러오기';
+  }
+
+  function setNote(html, kind) {
+    const el = $('#fetchNote');
+    if (!el) return;
+    el.innerHTML = html;
+    el.className = 'fetch-note' + (kind ? ' ' + kind : '');
+  }
+
+  function hideGuide() {
+    const g = $('#fetchGuide');
+    if (g) g.hidden = true;
+  }
+
+  function showGuide(msg) {
+    const g = $('#fetchGuide');
+    if (!g) return;
+    $('#fetchGuideMsg').textContent = msg;
+    g.hidden = false;
+  }
+
+  function openManual(focus) {
+    const w = $('#manualWrap');
+    if (w) w.open = true;
+    if (focus) { const ta = $('#sourceText'); if (ta) ta.focus(); }
+  }
+
+  async function loadFromUrl() {
+    const input = $('#urlInput');
+    if (!input) return;
+    if (!X) {
+      setNote('주소 불러오기 기능을 찾지 못했어요. 새로고침해 주세요.', 'bad');
+      return;
+    }
+
+    const check = X.parseUrl(input.value);
+    if (!check.ok) {
+      setNote('주소를 확인해 주세요.', 'bad');
+      showGuide(X.message(check.error));
+      input.focus();
+      return;
+    }
+
+    hideGuide();
+    setFetchBusy(true);
+    setNote('본문을 읽는 중이에요… 사이트에 따라 몇 초 걸려요.', 'loading');
+    const seq = ++fetchSeq;
+
+    let res;
+    try { res = await X.readUrl(check.url); }
+    catch (e) { res = { ok: false, error: 'network' }; }
+    if (seq !== fetchSeq) return;            // 그사이 다른 주소를 눌렀으면 무시
+    setFetchBusy(false);
+
+    if (!res || !res.ok) {
+      setNote('자동으로 읽지 못했어요.', 'bad');
+      showGuide(X.message((res && res.error) || 'network'));
+      return;
+    }
+
+    state.url = check.url;
+    input.value = check.url;
+    const ta = $('#sourceText');
+    ta.value = res.text;
+    state.source = res.text;
+    $('#charCount').textContent = res.text.length.toLocaleString() + '자';
+    setNote('✅ <b>' + esc(res.host) + '</b> 에서 ' +
+      (res.title ? '“' + esc(clipTitleForNote(res.title)) + '” ' : '') +
+      res.chars.toLocaleString() + '자를 읽었어요.', 'good');
+    generate(false);
+  }
+
+  function clipTitleForNote(t) {
+    t = String(t || '');
+    return t.length > 34 ? t.slice(0, 34).replace(/[\s,·]+$/, '') + '…' : t;
+  }
+
+  /* =====================================================================
      렌더
      ===================================================================== */
   function cardLabel(c, i) {
@@ -477,7 +567,7 @@
 
   function buildPreview() {
     if (!state.cards.length) {
-      $('#previewGrid').innerHTML = '<div class="empty"><div class="empty-icon">🖼️</div><p>원문을 붙여넣고 <b>자동 생성</b>을 눌러보세요.<br>표지 + 핵심 카드 + 마무리까지 한 번에 나옵니다.</p></div>';
+      $('#previewGrid').innerHTML = '<div class="empty"><div class="empty-icon">🔗</div><p>위에 기사·블로그 <b>주소</b>를 넣고 [불러오기]를 누르면<br> 제목·본문을 읽어 표지 + 핵심 카드 + 마무리까지 한 번에 나옵니다.</p></div>';
       canvases = [];
       return;
     }
@@ -556,6 +646,19 @@
      이벤트
      ===================================================================== */
   function bind() {
+    /* 주소 불러오기 */
+    const urlInput = $('#urlInput');
+    if (urlInput) {
+      urlInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); loadFromUrl(); }
+      });
+      urlInput.addEventListener('input', () => { if ($('#fetchGuide') && !$('#fetchGuide').hidden) hideGuide(); });
+    }
+    const fetchBtn = $('#fetchBtn');
+    if (fetchBtn) fetchBtn.addEventListener('click', loadFromUrl);
+    const openBtn = $('#openManualBtn');
+    if (openBtn) openBtn.addEventListener('click', () => openManual(true));
+
     /* 원문 */
     const ta = $('#sourceText');
     ta.addEventListener('input', () => {
@@ -804,7 +907,7 @@
     saveTimer = setTimeout(() => {
       try {
         localStorage.setItem(SAVE_KEY, JSON.stringify({
-          source: state.source, ratio: state.ratio, target: state.target,
+          source: state.source, url: state.url, ratio: state.ratio, target: state.target,
           handle: state.handle, theme: state.theme, cards: state.cards
         }));
         const el = $('#saveState');
@@ -818,6 +921,7 @@
     try { s = JSON.parse(localStorage.getItem(SAVE_KEY) || 'null'); } catch (e) { s = null; }
     if (!s || !Array.isArray(s.cards) || !s.cards.length) return false;
     state.source = s.source || '';
+    state.url = s.url || '';
     state.ratio = s.ratio || '4:5';
     state.target = s.target || 0;
     state.handle = s.handle || '@your_id';
@@ -845,6 +949,8 @@
     $$('#themeGrid [data-theme]').forEach(b => b.classList.toggle('on', b.dataset.theme === state.theme));
     const hi = $('#handleInput');
     hi.value = state.handle.replace(/^@/, '');
+    const ui = $('#urlInput');
+    if (ui && state.url) ui.value = state.url;
   }
 
   function toast(msg) {
@@ -868,9 +974,13 @@
       ta.value = s.text;
       $('#charCount').textContent = s.text.length.toLocaleString() + '자';
       state.cards = buildCards(s.text, 0);
+      setNote('지금 보이는 카드는 <b>예시</b>예요. 위에 기사·블로그 주소를 넣고 <b>불러오기</b>를 누르면 바로 내 기사로 바뀝니다.');
     } else {
       ta.value = state.source;
       $('#charCount').textContent = (state.source || '').length.toLocaleString() + '자';
+      if (state.url) {
+        setNote('마지막으로 불러온 주소 <b>' + esc(state.url.replace(/^https?:\/\//, '').slice(0, 40)) + '</b> 의 카드예요.');
+      }
     }
     syncControls();
     buildEditor();
@@ -879,7 +989,7 @@
 
     // 디버그/테스트용
     window.CardNewsApp = {
-      state, generate, buildCards, renderAll, exportZip, downloadCard,
+      state, generate, buildCards, renderAll, exportZip, downloadCard, loadFromUrl,
       setTheme(t) { state.theme = t; syncControls(); buildPreview(); },
       setRatio(r) { state.ratio = r; syncControls(); buildPreview(); },
       getCanvases() { return canvases; }

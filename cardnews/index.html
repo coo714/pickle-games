@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>카드뉴스 메이커 — 기사 한 편이 7장 카드로</title>
-<meta name="description" content="기사·블로그 글을 붙여넣으면 인스타 카드뉴스 5~7장이 자동으로 완성됩니다. 테마 5종, 4:5 / 9:16, 고해상도 PNG·ZIP 저장 무료 웹툴.">
+<title>카드뉴스 메이커 — 주소만 넣으면 기사가 7장 카드로</title>
+<meta name="description" content="기사·블로그 주소(URL)만 넣으면 제목과 본문을 자동으로 읽어 인스타 카드뉴스 5~7장이 완성됩니다. 테마 5종, 4:5 / 9:16, 고해상도 PNG·ZIP 저장 무료 웹툴.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%236D5EF8'/%3E%3Crect x='26' y='22' width='48' height='56' rx='8' fill='%23fff'/%3E%3Crect x='34' y='34' width='32' height='6' rx='3' fill='%236D5EF8'/%3E%3Crect x='34' y='46' width='24' height='6' rx='3' fill='%23FF4D8D'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -26,12 +26,12 @@
     <div class="logo">🃏</div>
     <div class="brand-txt">
       <h1>카드뉴스 메이커</h1>
-      <p>기사 한 편 → 인스타 카드뉴스 7장, 3분</p>
+      <p>주소 한 줄 → 인스타 카드뉴스 7장</p>
     </div>
   </div>
   <div class="top-actions">
     <div class="ver-group">
-      <span class="ver-chip" id="appVersion" data-version="1.1.0" title="현재 버전">v1.1.0</span>
+      <span class="ver-chip" id="appVersion" data-version="1.2.0" title="현재 버전">v1.2.0</span>
       <button id="checkUpdateBtn" class="btn-ghost" type="button">새 버전 확인</button>
     </div>
     <span id="saveState" class="save-state">자동 저장</span>
@@ -48,23 +48,45 @@
   <aside class="panel">
 
     <section class="block">
-      <div class="block-head"><h2><span class="step">1</span> 원문 붙여넣기</h2></div>
-      <textarea id="sourceText" class="source" spellcheck="false"
-        placeholder="뉴스 기사 본문, 블로그 글, 메모를 그대로 붙여넣으세요.&#10;첫 줄은 제목으로 자동 인식됩니다."></textarea>
-      <div class="row-between">
-        <span id="charCount" class="char">0자</span>
-        <div id="sampleRow" class="chips">
-          <span class="chips-label">예시</span>
-          <button data-sample="ai">AI 툴</button>
-          <button data-sample="econ">경제 뉴스</button>
-          <button data-sample="marketing">마케팅</button>
-        </div>
+      <div class="block-head"><h2><span class="step">1</span> 기사·블로그 주소(URL) 넣기</h2></div>
+
+      <div class="url-row">
+        <input id="urlInput" class="url-input" type="url" inputmode="url" autocomplete="off" spellcheck="false"
+          placeholder="https://news.example.com/article/123" aria-label="기사·블로그 주소">
+        <button id="fetchBtn" class="btn-fetch" type="button">불러오기</button>
       </div>
+
+      <p id="fetchNote" class="fetch-note" role="status" aria-live="polite">
+        주소를 넣고 <b>불러오기</b>를 누르면 제목·본문을 자동으로 읽어 카드뉴스까지 만들어요.
+      </p>
+
+      <div id="fetchGuide" class="fetch-guide" hidden>
+        <p id="fetchGuideMsg"></p>
+        <button id="openManualBtn" class="link-btn" type="button">원문 직접 입력 열기</button>
+      </div>
+
       <button id="generateBtn" class="btn-generate">
         <span class="g-icon">✨</span>
         <span class="g-txt">카드뉴스 5~7장 자동 생성</span>
       </button>
       <p class="hint">문단 흐름 · 문장 길이 · 핵심 숫자를 분석해 <b>표지 → 핵심 카드 → 마무리 CTA</b>로 나눕니다.</p>
+
+      <details id="manualWrap" class="manual">
+        <summary>주소가 안 불러와지거나 직접 수정하려면 열기</summary>
+        <div class="manual-body">
+          <textarea id="sourceText" class="source" spellcheck="false"
+            placeholder="뉴스 기사 본문, 블로그 글, 메모를 그대로 붙여넣으세요.&#10;첫 줄은 제목으로 자동 인식됩니다."></textarea>
+          <div class="row-between">
+            <span id="charCount" class="char">0자</span>
+            <div id="sampleRow" class="chips">
+              <span class="chips-label">예시</span>
+              <button data-sample="ai">AI 툴</button>
+              <button data-sample="econ">경제 뉴스</button>
+              <button data-sample="marketing">마케팅</button>
+            </div>
+          </div>
+        </div>
+      </details>
     </section>
 
     <section class="block">
@@ -108,7 +130,7 @@
     </section>
 
     <footer class="panel-foot">
-      <p>설치 없이 브라우저에서 바로 · 서버 전송 없음 (모든 처리는 내 기기에서)</p>
+      <p>주소 읽기는 공개 본문 추출기(Jina Reader)를 거칩니다 · 카드 생성·저장은 내 기기에서만</p>
     </footer>
   </aside>
 
@@ -141,6 +163,7 @@
 
 <script src="render.js"></script>
 <script src="zip.js"></script>
+<script src="extract.js"></script>
 <script src="app.js"></script>
 <script src="update.js"></script>
 </body>
