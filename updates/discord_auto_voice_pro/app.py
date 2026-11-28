@@ -2291,7 +2291,7 @@ class ProApp:
         args = game.get("args") or ""
         if path:
             text = "실행: {} {}".format(program_name(path), args).strip()
-            text += "  (입장할 때 이 프로그램도 같이 실행이 켜져 있을 때)"
+            text += "  ·  체크가 켜져 있으면 입장할 때 함께 실행됩니다"
         else:
             text = ("예: C:\\Riot Games\\Riot Client\\RiotClientServices.exe  ·  "
                     "바탕화면에 바로가기가 있으면 [롤 자동 찾기] 한 번이면 끝나요")
