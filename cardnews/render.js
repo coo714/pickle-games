@@ -132,7 +132,7 @@
     ctx.fillText(card.statNum, pad, base);
     if (card.statLabel) {
       const l = layoutRich(ctx, card.statLabel, { maxW: W - pad * 2, maxLines: 1, sizeMax: 25, sizeMin: 17, weight: 600, lh: 1.4, fam: SANS });
-      drawRich(ctx, l, pad, base + 34, { color: 'rgba(255,255,255,0.92)' });
+      drawRich(ctx, l, pad, base + 32, { color: 'rgba(255,255,255,0.92)' });
     }
     return true;
   }
@@ -451,7 +451,7 @@
       const badgeTxt = card.badge || '카드뉴스';
       d1Badge(ctx, pad, 176, badgeTxt, false);
 
-      const titleTop = bh ? bandBottom + 56 : (tall ? 320 : 286);
+      const titleTop = bh ? bandBottom + 74 : (tall ? 320 : 286);
       const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: bh ? (tall ? 4 : 3) : (tall ? 5 : 4), sizeMax: tall ? 118 : 108, sizeMin: 54, weight: 900, lh: 1.13 });
       drawRich(ctx, lay, pad, titleTop + lay.size * 0.92, { color: C1.white, numColor: C1.num });
 
@@ -462,7 +462,7 @@
         const sub = layoutRich(ctx, card.body, { maxW: W - pad * 2 - 30, maxLines, sizeMax: 35, sizeMin: 24, weight: 500, lh: 1.62 });
         drawRich(ctx, sub, pad, cursor + sub.size, { color: C1.sub, numColor: C1.num });
       }
-      if (card.statNum && bh) statOnPhoto(ctx, card, { W, pad, base: bandBottom - 46, color: C1.red, size: 96 });
+      if (card.statNum && bh) statOnPhoto(ctx, card, { W, pad, base: bandBottom - 96, color: C1.red, size: 96 });
       else if (card.statNum) d1Stat(ctx, W, H, card, pad, H - 300, H - 236);
       else if (!bh) {
         ctx.font = fx(700, 23, SANS); ctx.fillStyle = C1.dim;
@@ -500,7 +500,7 @@
 
 
       if (card.statNum) {
-        if (bh) statOnPhoto(ctx, card, { W, pad, base: bandBottom - 46, color: C1.red, size: 96 });
+        if (bh) statOnPhoto(ctx, card, { W, pad, base: bandBottom - 72, color: C1.red, size: 96 });
         else {
           const nb = Math.min(H - 262, bodyTop + body.height + 210);
           ctx.strokeStyle = 'rgba(255,255,255,0.13)'; ctx.lineWidth = 1.5;
@@ -617,7 +617,7 @@
       const bh = photoBand(ctx, o.photo, W, 196, tall ? 520 : 300, { fade: C2.bg, tintA: 0.06, washA: 0.5, focus: 0.45 });
       const bandBottom = bh ? 196 + bh : 0;
 
-      const titleTop = bh ? bandBottom + 78 : (tall ? 360 : 300);
+      const titleTop = bh ? bandBottom + 86 : (tall ? 360 : 300);
       const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: bh ? (tall ? 4 : 2) : 4, sizeMax: tall ? 98 : 90, sizeMin: 50, weight: 700, fam: SERIF, lh: 1.42 });
       drawRich(ctx, lay, W / 2, titleTop, { color: C2.deep, align: 'center', numColor: C2.num });
 
@@ -635,7 +635,7 @@
       }
 
       if (card.statNum && bh) {
-        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 44, color: '#FFFFFF', size: 92, fam: SERIF });
+        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 94, color: '#FFFFFF', size: 92, fam: SERIF });
       } else if (card.statNum) {
         ctx.strokeStyle = 'rgba(208,126,104,0.5)'; ctx.lineWidth = 1.2;
         ctx.beginPath(); ctx.arc(W / 2, H - 330, 112, 0, Math.PI * 2); ctx.stroke();
@@ -682,7 +682,7 @@
       drawRich(ctx, body, p, bodyTop + body.size, { color: C2.sub, numColor: C2.num });
 
       if (card.statNum && bh) {
-        statOnPhoto(ctx, card, { W, pad: p, base: bandBottom - 40, color: '#FFFFFF', size: 88, fam: SERIF });
+        statOnPhoto(ctx, card, { W, pad: p, base: bandBottom - 66, color: '#FFFFFF', size: 88, fam: SERIF });
       } else if (card.statNum) {
         const cy = Math.min(H - 356, bodyTop + body.height + 200);
         ctx.strokeStyle = 'rgba(208,126,104,0.45)'; ctx.lineWidth = 1.2;
@@ -851,7 +851,7 @@
       const bh = photoBand(ctx, o.photo, W, 176, tall ? 600 : 380, { fade: C3.bg, tintA: 0.16, washA: 0.6 });
       const bandBottom = bh ? 176 + bh : 0;
 
-      const titleTop = bh ? bandBottom + 62 : (tall ? 400 : 340);
+      const titleTop = bh ? bandBottom + 78 : (tall ? 400 : 340);
       const lay = layoutRich(ctx, card.title, { maxW: W - 160, maxLines: bh ? (tall ? 4 : 3) : 4, sizeMax: tall ? 118 : 110, sizeMin: 52, weight: 900, lh: 1.14 });
       ctx.save();
       ctx.shadowColor = 'rgba(120,60,255,0.8)'; ctx.shadowBlur = 26;
@@ -866,7 +866,7 @@
         drawRich(ctx, sub, W / 2, cursor + sub.size, { color: C3.sub, align: 'center', numColor: C3.num });
         cursor += sub.height;
       }
-      if (card.statNum && bh) statOnPhoto(ctx, card, { W, pad: 80, base: bandBottom - 44, color: '#FFFFFF', size: 92 });
+      if (card.statNum && bh) statOnPhoto(ctx, card, { W, pad: 80, base: bandBottom - 96, color: '#FFFFFF', size: 92 });
       else if (card.statNum) d3Stat(ctx, W, H, card, H - 300);
 
       ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = fx(600, 21, SANS); ctx.textAlign = 'center';
@@ -898,7 +898,7 @@
       drawRich(ctx, body, W / 2, bodyTop + body.size, { color: C3.sub, align: 'center', numColor: C3.cyan });
 
       if (card.statNum && bh) {
-        statOnPhoto(ctx, card, { W, pad: 80, base: bandBottom - 40, color: '#FFFFFF', size: 88 });
+        statOnPhoto(ctx, card, { W, pad: 80, base: bandBottom - 66, color: '#FFFFFF', size: 88 });
       } else if (card.statNum) {
         const cy = Math.min(H - 258, bodyTop + body.height + 250);
         ctx.strokeStyle = 'rgba(0,229,255,0.35)'; ctx.lineWidth = 1.5;
@@ -997,7 +997,7 @@
       const bh = photoBand(ctx, o.photo, W, 146, tall ? 540 : 300, { fade: C4.bg, tintA: 0.04, washA: 0.62, focus: 0.45 });
       const bandBottom = bh ? 146 + bh : 0;
 
-      const top = bh ? bandBottom + 30 : (tall ? 300 : 250);
+      const top = bh ? bandBottom + 42 : (tall ? 300 : 250);
       ctx.fillStyle = C4.accent; ctx.fillRect(pad, top, 20, 20);
 
       const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: bh ? 3 : 4, sizeMax: tall ? 96 : 86, sizeMin: 48, weight: 700, lh: 1.32 });
@@ -1012,7 +1012,7 @@
       }
 
       if (card.statNum && bh) {
-        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 40, color: '#FFFFFF', size: 88 });
+        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 66, color: '#FFFFFF', size: 88 });
       } else if (card.statNum) {
         const s = fitOneLine(ctx, card.statNum, { size: 132, min: 56, weight: 200, maxW: W - pad * 2 });
         ctx.font = fx(200, s, SANS); ctx.fillStyle = C4.ink;
@@ -1048,7 +1048,7 @@
       drawRich(ctx, body, pad, bodyTop + body.size, { color: C4.sub, numColor: C4.accent });
 
       if (card.statNum && bh) {
-        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 36, color: '#FFFFFF', size: 84 });
+        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 62, color: '#FFFFFF', size: 84 });
       } else if (card.statNum) {
         const top = Math.min(H - 400, bodyTop + body.height + 150);
         ctx.fillStyle = C4.hair; ctx.fillRect(pad, top, W - pad * 2, 1);
@@ -1186,7 +1186,7 @@
       const bh = photoBand(ctx, o.photo, W, 158, tall ? 560 : 360, { fade: C5.bg, tintA: 0.05, washA: 0.62, focus: 0.45 });
       const bandBottom = bh ? 158 + bh : 0;
 
-      const titleTop = bh ? bandBottom + 48 : (tall ? 350 : 300);
+      const titleTop = bh ? bandBottom + 66 : (tall ? 350 : 300);
       const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: bh ? 3 : 4, sizeMax: tall ? 96 : 88, sizeMin: 48, weight: 800, fam: SERIF, lh: 1.3 });
       drawRich(ctx, lay, pad, titleTop + lay.size, { color: C5.ink, numColor: C5.red });
 
@@ -1203,7 +1203,7 @@
       }
 
       if (card.statNum && bh) {
-        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 40, color: '#FFFFFF', size: 88, fam: SERIF });
+        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 66, color: '#FFFFFF', size: 88, fam: SERIF });
       } else if (card.statNum) d5Stat(ctx, W, H, card, H - 360, 200);
       else {
         ctx.font = fx(500, 19, SANS); ctx.fillStyle = C5.faint;
@@ -1235,7 +1235,7 @@
       drawRich(ctx, body, pad, bodyTop + body.size, { color: C5.sub, numColor: C5.red });
 
       if (card.statNum && bh) {
-        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 40, color: '#FFFFFF', size: 84, fam: SERIF });
+        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 62, color: '#FFFFFF', size: 84, fam: SERIF });
       } else if (card.statNum) {
         const top = Math.min(H - 300, bodyTop + body.height + 110);
         d5Stat(ctx, W, H, card, top, 178);
