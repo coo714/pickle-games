@@ -1341,7 +1341,7 @@
       return;
     }
 
-    const rowSize = tall ? 40 : 33;
+    const rowSize = tall ? 42 : 34;
     const lhRate = (id === 'pastel' || id === 'news') ? 1.72 : 1.6;
     const lh = rowSize * lhRate;
     const chip = Math.round(rowSize * 1.55);
@@ -1356,7 +1356,7 @@
     const bandBottom = H - 200;
     const sum = rowH.reduce((a, b) => a + b, 0);
     let gap = rows.length > 1 ? (bandBottom - bandTop - sum) / (rows.length - 1) : 0;
-    gap = Math.max(18, Math.min(gap, tall ? 120 : 92));
+    gap = Math.max(18, Math.min(gap, tall ? 96 : 66));
     let y = bandTop + Math.max(0, (bandBottom - bandTop - (sum + gap * (rows.length - 1))) / 2);
 
     laid.forEach((l, i) => {
