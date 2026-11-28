@@ -12,12 +12,16 @@
     source: '',
     url: '',                // 마지막으로 불러온 주소
     ratio: '4:5',
-    target: 0,              // 0 = 자동, 5/6/7 = 전체 장 수
+    target: 0,              // 0 = 자동, 3 = 3장 요약, 5/6/7 = 전체 장 수
     handle: '@your_id',
     theme: 'dark',
-    cards: []
+    cards: [],
+    view: 'grid',           // grid | slide
+    slide: 0,
+    photos: []              // 마지막으로 불러온 기사에서 뽑은 사진 주소
   };
   let canvases = [];
+  let slideCv = null;
   let saveTimer = null;
 
   const $ = (s) => document.querySelector(s);
@@ -26,6 +30,98 @@
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* =====================================================================
+     카드 사진 (외부 이미지 · 직접 첨부)
+     =====================================================================
+     외부 이미지를 canvas 에 그린 뒤 PNG/ZIP 으로 저장하면 그림이 ‘오염된’
+     캔버스가 되어 저장이 막힌다(Canvas Taint). 그래서 CORS 를 열어 주는
+     이미지 프록시(images.weserv.nl)를 거쳐 crossOrigin 으로 불러온다.
+     프록시가 실패하면 그림 없이 원래 테마 배경으로 그린다. */
+
+  const IMG_PROXY = 'https://images.weserv.nl/?url=';
+  const IMG_CACHE = new Map();          // 원본 주소 → { el, state }
+
+  function proxied(src) {
+    src = String(src || '');
+    if (!src) return '';
+    if (/^(?:data|blob):/i.test(src)) return src;
+    if (!/^https?:\/\//i.test(src)) return '';
+    return IMG_PROXY + encodeURIComponent(src.replace(/^https?:\/\//i, '')) + '&w=1080&output=jpg&q=82&we';
+  }
+
+  function imageEl(src) {
+    const rec = src ? IMG_CACHE.get(src) : null;
+    return rec && rec.el ? rec.el : null;
+  }
+
+  /** 카드에 걸린 사진을 (필요하면)불러오고, 하나씩 끝날 때마다 다시 그린다 */
+  function ensureImages() {
+    state.cards.forEach((c, i) => {
+      const src = c && c.imageSrc;
+      if (!src) return;
+      const rec = IMG_CACHE.get(src);
+      if (rec) {
+        if (rec.state === 'ready' && !rec.painted) { rec.painted = true; if (state.view === 'slide') { if (i === state.slide) renderOne(i); } else renderOne(i); }
+        return;
+      }
+      const entry = { el: null, state: 'loading', painted: false };
+      IMG_CACHE.set(src, entry);
+      const el = new Image();
+      el.crossOrigin = 'anonymous';
+      el.decoding = 'async';
+      el.onload = () => {
+        entry.el = el; entry.state = 'ready'; entry.painted = true;
+        if (state.view === 'slide') { if (i === state.slide) renderOne(i); }
+        else renderOne(i);
+      };
+      el.onerror = () => {
+        entry.state = 'error';
+        if (i === state.slide || state.view !== 'slide') renderOne(i);
+      };
+      el.src = proxied(src);
+      if (!el.src) entry.state = 'error';
+    });
+  }
+
+  /** 사진 한 장을 카드에 걸기 (직접 첨부·자동 추출 공통) */
+  function setCardImage(i, src) {
+    const c = state.cards[i];
+    if (!c) return;
+    if (src) { delete c.imageOff; c.imageSrc = src; }
+    else { c.imageSrc = ''; c.imageOff = true; }
+    buildEditor();
+    buildPreview();
+    scheduleSave();
+  }
+
+  /** 올린 사진을 카드에 쓰기 좋게 줄이고 dataURL 로 */
+  function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || !/^image\//.test(file.type)) { reject(new Error('image')); return; }
+      if (file.size > 20 * 1024 * 1024) { reject(new Error('big')); return; }
+      const fr = new FileReader();
+      fr.onerror = () => reject(new Error('read'));
+      fr.onload = () => {
+        const im = new Image();
+        im.onerror = () => reject(new Error('image'));
+        im.onload = () => {
+          const maxW = 1080;
+          const sc = Math.min(1, maxW / (im.width || maxW));
+          const cv = document.createElement('canvas');
+          cv.width = Math.max(1, Math.round((im.width || maxW) * sc));
+          cv.height = Math.max(1, Math.round((im.height || maxW) * sc));
+          const g = cv.getContext('2d');
+          g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, cv.width, cv.height);
+          g.drawImage(im, 0, 0, cv.width, cv.height);
+          try { resolve(cv.toDataURL('image/jpeg', 0.84)); }
+          catch (e) { resolve(String(fr.result)); }
+        };
+        im.src = String(fr.result);
+      };
+      fr.readAsDataURL(file);
+    });
   }
 
   /* =====================================================================
@@ -338,6 +434,9 @@
     const norm = normalize(text);
     if (!norm) return [];
 
+    /* 3장 요약 모드는 다른 엔진을 쓴다 */
+    if (target === 3) return buildSummaryCards(norm);
+
     const paras = norm.split(/\n+/).map(s => s.trim()).filter(Boolean);
     let title = '';
     let rest = paras;
@@ -455,6 +554,130 @@
   }
 
   /* =====================================================================
+     3장 요약 — 01 표지(제목+대표사진) → 02 핵심 3줄 → 03 결론·CTA
+     ===================================================================== */
+  function summaryLine(t, max) {
+    let s = String(t || '')
+      .replace(/^(?:그러나|하지만|다만|또한|한편|이에|결국|특히|그런데|그리고|또|이는|이처럼|아울러)\s+/, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/[.!?…]+$/, '')
+      .replace(/[,·\s]+$/, '');
+    if (s.length > max) {
+      const cut = s.slice(0, max);
+      const sp = Math.max(cut.lastIndexOf(' '), cut.lastIndexOf(','), cut.lastIndexOf('·'));
+      s = (sp > max * 0.55 ? cut.slice(0, sp) : cut).replace(/[\s,·]+$/, '') + '…';
+    }
+    return s;
+  }
+
+  function buildSummaryCards(norm) {
+    const paras = String(norm).split(/\n+/).map(s => s.trim()).filter(Boolean);
+    let title = '';
+    let rest = paras;
+    if (paras.length > 1 && paras[0].length <= 70 && !/[.!?]$/.test(paras[0])) {
+      title = paras[0];
+      rest = paras.slice(1);
+    }
+
+    let sents = [];
+    rest.forEach((p, pi) => {
+      splitSentences(p).forEach(raw => {
+        breakLong(raw).forEach(t => {
+          t = t.trim();
+          if (t.length < 6) return;
+          if (BOILER.test(t) && t.length < 90) return;
+          sents.push({ t, p: pi });
+        });
+      });
+    });
+    if (!sents.length) sents = [{ t: norm, p: 0 }];
+
+    if (!title) {
+      title = clip(sents[0].t.replace(/[.!?]$/, ''), 46);
+      if (sents.length > 3) sents = sents.slice(1);
+    }
+    title = title.replace(/[.!?]$/, '').trim();
+
+    const scored = sents.map((s, i) => {
+      const b = bestNumber(s.t);
+      let sc = 0;
+      if (b) sc += 3 + Math.min(b.score, 6) * 0.5;
+      if (s.t.length >= 24 && s.t.length <= 95) sc += 1.6;
+      if (s.t.length > 130) sc -= 0.9;
+      if (i === 0) sc += 0.5;
+      return { s, i, sc, b };
+    });
+
+    const byScore = scored.slice().sort((a, b) => b.sc - a.sc || a.i - b.i);
+    const picked = [];
+    const usedPara = new Set();
+    byScore.forEach(x => {
+      if (picked.length >= 3) return;
+      if (usedPara.has(x.s.p)) return;
+      usedPara.add(x.s.p);
+      picked.push(x);
+    });
+    if (picked.length < 3) {
+      byScore.forEach(x => {
+        if (picked.length >= 3) return;
+        if (picked.some(p => p.i === x.i)) return;
+        picked.push(x);
+      });
+    }
+    picked.sort((a, b) => a.i - b.i);
+    const lines = picked.map(x => summaryLine(x.s.t, 46)).filter(Boolean);
+
+    /* 표지 — 첫 문장을 리드로, 가장 센 숫자를 크게 */
+    const allNums = [];
+    sents.forEach(s => numCandidates(s.t).forEach(n => allNums.push({ n, s })));
+    allNums.sort((a, b) => b.n.score - a.n.score);
+    const coverNum = allNums.length && allNums[0].n.score >= 3 ? allNums[0] : null;
+    let coverLabel = coverNum ? cleanLabel(clauseOf(coverNum.s.t, coverNum.n.index)) : '';
+    if (coverNum) coverLabel = stripNumFromLabel(coverLabel, coverNum.n.v);
+
+    /* 결론 — 마지막 문단의 핵심 문장 */
+    let concl = '';
+    const lastP = sents.length ? sents[sents.length - 1] : null;
+    if (lastP) concl = summaryLine(lastP.t, 38);
+    if (concl.length < 8) {
+      const restPick = byScore.find(x => !picked.some(p => p.i === x.i));
+      concl = restPick ? summaryLine(restPick.s.t, 38) : summaryLine(title, 38);
+    }
+
+    return [
+      {
+        type: 'cover',
+        badge: '카드뉴스',
+        title: clip(title, 52),
+        body: clip(sents[0].t, 96),
+        statNum: coverNum ? coverNum.n.v : '',
+        statLabel: coverLabel,
+        bullets: []
+      },
+      {
+        type: 'summary',
+        badge: '3줄 요약',
+        title: '핵심 3가지',
+        body: '',
+        statNum: '',
+        statLabel: '',
+        bullets: lines.length ? lines : [summaryLine(title, 46)]
+      },
+      {
+        type: 'cta',
+        badge: 'CONCLUSION',
+        title: concl || '지금 저장해 두세요',
+        body: '자세한 내용은 1장부터 순서대로 보세요.',
+        statNum: '',
+        statLabel: '',
+        bullets: [],
+        cta: '저장 · 공유 · 팔로우'
+      }
+    ];
+  }
+
+  /* =====================================================================
      주소(URL)로 본문 불러오기
      ===================================================================== */
   let fetchSeq = 0;
@@ -530,11 +753,13 @@
     const ta = $('#sourceText');
     ta.value = res.text;
     state.source = res.text;
+    state.photos = Array.isArray(res.images) ? res.images.slice(0, 3) : [];
     $('#charCount').textContent = res.text.length.toLocaleString() + '자';
     setNote('✅ <b>' + esc(res.host) + '</b> 에서 ' +
       (res.title ? '“' + esc(clipTitleForNote(res.title)) + '” ' : '') +
-      res.chars.toLocaleString() + '자를 읽었어요.', 'good');
-    generate(false);
+      res.chars.toLocaleString() + '자를 읽었어요.' +
+      (state.photos.length ? ' 본문 사진 ' + state.photos.length + '장도 함께 넣었어요.' : ''), 'good');
+    generate(false, true);
   }
 
   function clipTitleForNote(t) {
@@ -547,32 +772,74 @@
      ===================================================================== */
   function cardLabel(c, i) {
     if (c.type === 'cover') return '표지';
+    if (c.type === 'summary') return '요약';
     if (c.type === 'cta') return '마무리';
     return '핵심 ' + p2(i);
   }
 
-  function renderOne(i) {
-    const cv = canvases[i];
-    if (!cv || !state.cards[i]) return;
-    R.renderCard(cv, {
+  function renderOptions(i) {
+    const c = state.cards[i];
+    return {
       ratio: state.ratio, theme: state.theme,
-      card: state.cards[i], index: i + 1, total: state.cards.length,
-      handle: state.handle
-    });
+      card: c, index: i + 1, total: state.cards.length,
+      handle: state.handle,
+      photo: imageEl(c && c.imageSrc)
+    };
+  }
+
+  function renderOne(i) {
+    const c = state.cards[i];
+    if (!c) return;
+    if (state.view === 'slide') {
+      if (i === state.slide && slideCv) R.renderCard(slideCv, renderOptions(i));
+      return;
+    }
+    const cv = canvases[i];
+    if (cv) R.renderCard(cv, renderOptions(i));
   }
 
   function renderAll() {
+    if (state.view === 'slide') { renderOne(state.slide); return; }
     state.cards.forEach((_, i) => renderOne(i));
   }
 
-  function buildPreview() {
-    if (!state.cards.length) {
-      $('#previewGrid').innerHTML = '<div class="empty"><div class="empty-icon">🔗</div><p>위에 기사·블로그 <b>주소</b>를 넣고 [불러오기]를 누르면<br> 제목·본문을 읽어 표지 + 핵심 카드 + 마무리까지 한 번에 나옵니다.</p></div>';
-      canvases = [];
-      return;
-    }
+  function updateStageMeta() {
+    const el = $('#stageMeta');
+    if (!el || !state.cards.length) return;
     const d = R.dims(state.ratio);
-    $('#previewGrid').innerHTML = state.cards.map((c, i) => `
+    el.textContent = state.cards.length + '장 · ' + d.W + '×' + d.H + 'px · ' + R.THEMES[state.theme].name +
+      (state.view === 'slide' ? ' · ' + (state.slide + 1) + ' / ' + state.cards.length + ' 넘겨 보는 중' : '');
+  }
+
+  function updateViewToggle() {
+    const t = $('#viewToggle');
+    if (!t) return;
+    Array.from(t.querySelectorAll('[data-view]')).forEach(b => b.classList.toggle('on', b.dataset.view === state.view));
+    const pos = $('#slidePosMini');
+    if (pos) pos.textContent = state.cards.length ? (state.slide + 1) + ' / ' + state.cards.length : '0 / 0';
+  }
+
+  function pageSummaryHTML() {
+    if (!state.cards.length) return '';
+    const rows = state.cards.map((c, i) => {
+      const key = (c.bullets && c.bullets.length) ? c.bullets.join(' · ') : (c.body || '');
+      return '<li data-slide-to="' + i + '">' +
+        '<b>' + p2(i + 1) + '</b>' +
+        '<em>' + esc(cardLabel(c, i)) + '</em>' +
+        '<span class="ps-t">' + esc(c.title || '') + '</span>' +
+        '<span class="ps-l">' + esc(clip(String(key), 64)) + '</span>' +
+        '</li>';
+    }).join('');
+    return '<div class="page-summary">' +
+      '<div class="ps-head">한눈에 보는 페이지 요약<button id="slideSummaryBtn" type="button">접기</button></div>' +
+      '<ol class="ps-list">' + rows + '</ol></div>';
+  }
+
+  function buildGrid() {
+    const d = R.dims(state.ratio);
+    const host = $('#previewGrid');
+    host.className = 'preview-grid';
+    host.innerHTML = state.cards.map((c, i) => `
       <figure class="shot" data-i="${i}">
         <div class="shot-frame">
           <canvas></canvas>
@@ -588,8 +855,73 @@
         </figcaption>
       </figure>`).join('');
     canvases = $$('#previewGrid canvas');
+    slideCv = null;
     renderAll();
-    $('#stageMeta').textContent = state.cards.length + '장 · ' + d.W + '×' + d.H + 'px · ' + R.THEMES[state.theme].name;
+    ensureImages();
+  }
+
+  function buildSlide() {
+    const n = state.cards.length;
+    const i = Math.max(0, Math.min(n - 1, state.slide));
+    state.slide = i;
+    const d = R.dims(state.ratio);
+    const host = $('#previewGrid');
+    host.className = 'preview-grid slide-mode';
+    const dots = state.cards.map((_, k) =>
+      `<button class="dot${k === i ? ' on' : ''}" data-slide-to="${k}" aria-label="${k + 1}번째 카드"></button>`).join('');
+    host.innerHTML = `
+      <div class="slide-box">
+        <button class="snav prev" data-slide="prev" ${i === 0 ? 'disabled' : ''} aria-label="이전 카드">‹</button>
+        <figure class="slide-frame" data-i="${i}">
+          <canvas></canvas>
+          <span class="slide-badge"><b>${p2(i + 1)}</b> / ${p2(n)}</span>
+          <div class="shot-tools">
+            <button class="mini-btn" data-act="zoom" data-i="${i}">크게 보기</button>
+            <button class="mini-btn solid" data-act="png" data-i="${i}">PNG</button>
+          </div>
+        </figure>
+        <button class="snav next" data-slide="next" ${i === n - 1 ? 'disabled' : ''} aria-label="다음 카드">›</button>
+      </div>
+      <div class="slide-bar">
+        <div class="slide-dots">${dots}</div>
+        <div class="slide-info">${esc(cardLabel(state.cards[i], i))} · ${d.W} × ${d.H}</div>
+      </div>
+      ${pageSummaryHTML()}`;
+    slideCv = host.querySelector('canvas');
+    canvases = [];
+    renderOne(i);
+    ensureImages();
+    updateViewToggle();
+    updateStageMeta();
+  }
+
+  function buildPreview() {
+    if (!state.cards.length) {
+      $('#previewGrid').className = 'preview-grid';
+      $('#previewGrid').innerHTML = '<div class="empty"><div class="empty-icon">🔗</div><p>위에 기사·블로그 <b>주소</b>를 넣고 [불러오기]를 누르면<br> 제목·본문을 읽어 표지 + 핵심 카드 + 마무리까지 한 번에 나옵니다.</p></div>';
+      canvases = [];
+      slideCv = null;
+      return;
+    }
+    if (state.view === 'slide') buildSlide();
+    else { buildGrid(); updateViewToggle(); updateStageMeta(); }
+  }
+
+  function setView(v) {
+    if (v !== 'grid' && v !== 'slide') return;
+    state.view = v;
+    if (v === 'slide') state.slide = Math.min(state.slide || 0, Math.max(0, state.cards.length - 1));
+    buildPreview();
+    scheduleSave();
+  }
+
+  function goSlide(n) {
+    if (!state.cards.length) return;
+    const next = Math.max(0, Math.min(state.cards.length - 1, n));
+    if (next === state.slide && state.view === 'slide') return;
+    state.slide = next;
+    if (state.view !== 'slide') state.view = 'slide';
+    buildPreview();
   }
 
   /* =====================================================================
@@ -613,9 +945,19 @@
             <label class="fld"><span>강조 숫자</span><input data-card="${i}" data-field="statNum" value="${esc(c.statNum || '')}" placeholder="예: 5분"></label>
             <label class="fld"><span>숫자 설명</span><input data-card="${i}" data-field="statLabel" value="${esc(c.statLabel || '')}" placeholder="예: 기사 한 편이 카드로"></label>
           </div>
+          ${(c.type === 'cta' || c.type === 'summary') ? `
+            <label class="fld"><span>${c.type === 'summary' ? '요약 3줄 (한 줄에 하나)' : '요약 목록 (한 줄에 하나)'}</span><textarea data-card="${i}" data-field="bullets" rows="4">${esc((c.bullets || []).join('\n'))}</textarea></label>` : ''}
           ${c.type === 'cta' ? `
-            <label class="fld"><span>요약 목록 (한 줄에 하나)</span><textarea data-card="${i}" data-field="bullets" rows="4">${esc((c.bullets || []).join('\n'))}</textarea></label>
             <label class="fld"><span>CTA 문구</span><input data-card="${i}" data-field="cta" value="${esc(c.cta || '')}"></label>` : ''}
+          <div class="ci-photo">
+            <div class="ci-photo-thumb">${c.imageSrc
+              ? `<img src="${esc(proxied(c.imageSrc))}" alt="카드 사진" loading="lazy">`
+              : `<span>사진 없음</span>`}</div>
+            <div class="ci-photo-btns">
+              <button data-act="pick" data-i="${i}">${c.imageSrc ? '사진 바꾸기' : '사진 넣기'}</button>
+              ${c.imageSrc ? `<button data-act="unphoto" data-i="${i}" class="danger">사진 빼기</button>` : ''}
+            </div>
+          </div>
           <div class="ci-actions">
             <button data-act="up" data-i="${i}" ${i === 0 ? 'disabled' : ''} title="위로">↑</button>
             <button data-act="down" data-i="${i}" ${i === state.cards.length - 1 ? 'disabled' : ''} title="아래로">↓</button>
@@ -646,6 +988,8 @@
      이벤트
      ===================================================================== */
   function bind() {
+    if (bind.done) return;      // 두 번 불려도 이벤트가 겹치지 않게
+    bind.done = true;
     /* 주소 불러오기 */
     const urlInput = $('#urlInput');
     if (urlInput) {
@@ -698,6 +1042,30 @@
       scheduleSave();
     });
 
+    /* 미리보기 방식 (격자 / 넘겨 보기) */
+    const vt = $('#viewToggle');
+    if (vt) vt.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-view]');
+      if (!b) return;
+      setView(b.dataset.view);
+    });
+
+    /* 사진 파일 선택 */
+    const photoInput = $('#photoInput');
+    if (photoInput) photoInput.addEventListener('change', async () => {
+      const i = +(photoInput.dataset.i || 0);
+      const f = photoInput.files && photoInput.files[0];
+      photoInput.value = '';
+      if (!f) return;
+      try {
+        const data = await fileToDataUrl(f);
+        setCardImage(i, data);
+        toast('사진을 넣었어요');
+      } catch (err) {
+        toast((err && err.message === 'big') ? '사진이 너무 커요 (20MB 이하)' : '사진을 읽지 못했어요');
+      }
+    });
+
     /* 아이디 */
     const hi = $('#handleInput');
     hi.addEventListener('input', () => {
@@ -744,10 +1112,35 @@
         state.cards.splice(i, 1); buildEditor(); buildPreview(); scheduleSave();
       }
       else if (act === 'png') { downloadCard(i); }
+      else if (act === 'pick') {
+        const pi = $('#photoInput');
+        if (!pi) { toast('사진 기능을 찾지 못했어요. 새로고침해 주세요.'); return; }
+        pi.dataset.i = String(i);
+        pi.value = '';
+        pi.click();
+      }
+      else if (act === 'unphoto') { setCardImage(i, ''); toast('사진을 뺐어요'); }
     });
 
     /* 미리보기 */
     $('#previewGrid').addEventListener('click', (e) => {
+      const nav = e.target.closest('[data-slide]');
+      if (nav) {
+        goSlide(nav.dataset.slide === 'prev' ? state.slide - 1 : state.slide + 1);
+        return;
+      }
+      const sumBtn = e.target.closest('#slideSummaryBtn');
+      if (sumBtn) {
+        const box = sumBtn.closest('.page-summary');
+        if (box) {
+          box.classList.toggle('off');
+          sumBtn.textContent = box.classList.contains('off') ? '펼치기' : '접기';
+        }
+        return;
+      }
+      const to = e.target.closest('[data-slide-to]');
+      if (to) { goSlide(+to.dataset.slideTo); return; }
+
       const b = e.target.closest('button[data-act]');
       if (b) {
         const i = +b.dataset.i;
@@ -755,7 +1148,7 @@
         if (b.dataset.act === 'zoom') openZoom(i);
         return;
       }
-      const fig = e.target.closest('.shot');
+      const fig = e.target.closest('.shot, .slide-frame');
       if (fig) openZoom(+fig.dataset.i);
     });
 
@@ -768,6 +1161,12 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeZoom();
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); generate(false); }
+      /* 넘겨 보기에서는 좌우 화살표로 카드 넘기기 */
+      const tag = (e.target && e.target.tagName) || '';
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(tag) || (e.target && e.target.isContentEditable);
+      if (typing || state.view !== 'slide') return;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); goSlide(state.slide - 1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); goSlide(state.slide + 1); }
     });
   }
 
@@ -780,7 +1179,7 @@
   /* =====================================================================
      생성
      ===================================================================== */
-  function generate(silent) {
+  function generate(silent, fresh) {
     const src = $('#sourceText').value.trim();
     state.source = src;
     if (!src) { toast('원문을 먼저 붙여넣어 주세요'); return; }
@@ -789,12 +1188,31 @@
     btn.disabled = true;
     setTimeout(() => {
       try {
+        const prev = fresh ? [] : (state.cards || []);
         const cards = buildCards(src, state.target);
         if (!cards.length) { toast('카드를 만들 수 없어요. 글을 조금 더 넣어주세요'); return; }
+
+        /* 사진 — 직접 넣은 사진은 같은 자리에 유지, 나머지는 기사 사진을 차례로 */
+        cards.forEach((c, i) => {
+          const old = prev[i];
+          if (old && old.imageSrc) { c.imageSrc = old.imageSrc; delete c.imageOff; }
+          else if (old && old.imageOff) { c.imageSrc = ''; c.imageOff = true; }
+        });
+        const photos = state.photos || [];
+        cards.forEach((c, i) => {
+          if (c.imageSrc || c.imageOff) return;
+          const u = photos[i] || (i === 0 ? photos[0] : '');
+          if (u) c.imageSrc = u;
+        });
+
         state.cards = cards;
+        if (state.view === 'slide') state.slide = Math.min(state.slide, cards.length - 1);
         buildEditor();
         buildPreview();
-        if (!silent) toast(cards.length + '장 카드뉴스를 만들었어요 ✨');
+        if (!silent) {
+          const withPhoto = cards.filter(c => c.imageSrc).length;
+          toast(cards.length + '장 카드뉴스를 만들었어요' + (withPhoto ? ' (사진 ' + withPhoto + '장)' : '') + ' ✨');
+        }
         $('#stageMeta').classList.add('flash');
         setTimeout(() => $('#stageMeta').classList.remove('flash'), 900);
         scheduleSave();
@@ -825,24 +1243,43 @@
   }
 
   function canvasBlob(cv) {
-    return new Promise(res => {
-      if (cv.toBlob) cv.toBlob(b => res(b), 'image/png');
-      else {
-        const d = cv.toDataURL('image/png');
-        const bin = atob(d.split(',')[1]);
-        const u8 = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-        res(new Blob([u8], { type: 'image/png' }));
+    return new Promise((res, rej) => {
+      try {
+        if (cv.toBlob) {
+          cv.toBlob(b => (b ? res(b) : rej(new Error('이미지 변환 실패'))), 'image/png');
+        } else {
+          const d = cv.toDataURL('image/png');
+          const bin = atob(d.split(',')[1]);
+          const u8 = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+          res(new Blob([u8], { type: 'image/png' }));
+        }
+      } catch (err) {
+        /* 오염된 캔버스(외부 이미지 CORS 실패) 등 */
+        rej(new Error('외부 사진 때문에 저장이 막혔어요. 해당 카드의 사진을 빼고 다시 저장해 주세요'));
       }
     });
   }
 
+  /* 카드 한 장을 임시 캔버스에 그려 PNG Blob 으로 — 화면 상태와 무관하게 저장 */
+  function tempCanvas(i) {
+    const cv = document.createElement('canvas');
+    const d = R.dims(state.ratio);
+    cv.width = d.W; cv.height = d.H;
+    R.renderCard(cv, renderOptions(i));
+    return cv;
+  }
+
   async function downloadCard(i) {
-    const cv = canvases[i];
-    if (!cv) { toast('아직 카드가 없어요'); return; }
-    const blob = await canvasBlob(cv);
-    saveBlob(blob, 'cardnews_' + p2(i + 1) + '_' + state.theme + '.png');
-    toast(p2(i + 1) + '번 카드 PNG를 저장했어요');
+    if (!state.cards[i]) { toast('아직 카드가 없어요'); return; }
+    try {
+      const blob = await canvasBlob(tempCanvas(i));
+      if (!blob) throw new Error('빈 이미지');
+      saveBlob(blob, 'cardnews_' + p2(i + 1) + '_' + state.theme + '.png');
+      toast(p2(i + 1) + '번 카드 PNG를 저장했어요');
+    } catch (err) {
+      toast('PNG 저장 실패: ' + (err && err.message ? err.message : '알 수 없는 오류'));
+    }
   }
 
   async function exportZip() {
@@ -852,8 +1289,9 @@
     btn.disabled = true; btn.textContent = 'ZIP 만드는 중…';
     try {
       const files = [];
-      for (let i = 0; i < canvases.length; i++) {
-        const blob = await canvasBlob(canvases[i]);
+      for (let i = 0; i < state.cards.length; i++) {
+        const blob = await canvasBlob(tempCanvas(i));
+        if (!blob) throw new Error(p2(i + 1) + '번 카드 이미지를 만들지 못했어요');
         const buf = new Uint8Array(await blob.arrayBuffer());
         files.push({ name: 'cardnews_' + p2(i + 1) + '.png', data: buf });
       }
@@ -864,6 +1302,7 @@
         '비율: ' + state.ratio + ' (' + R.dims(state.ratio).W + 'x' + R.dims(state.ratio).H + ')',
         '아이디: ' + state.handle,
         '카드 수: ' + state.cards.length,
+        '사진: ' + state.cards.filter(c => c.imageSrc).length + '장',
         '',
         '파일: cardnews_01.png ~ cardnews_' + p2(state.cards.length) + '.png'
       ].join('\n');
@@ -905,14 +1344,26 @@
   function scheduleSave() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      try {
-        localStorage.setItem(SAVE_KEY, JSON.stringify({
-          source: state.source, url: state.url, ratio: state.ratio, target: state.target,
-          handle: state.handle, theme: state.theme, cards: state.cards
-        }));
+      const payload = {
+        source: state.source, url: state.url, ratio: state.ratio, target: state.target,
+        handle: state.handle, theme: state.theme, cards: state.cards,
+        view: state.view, slide: state.slide, photos: state.photos
+      };
+      const mark = () => {
         const el = $('#saveState');
         if (el) { el.textContent = '자동 저장됨'; el.classList.add('on'); setTimeout(() => el.classList.remove('on'), 1200); }
-      } catch (e) { /* 저장 실패는 무시 */ }
+      };
+      try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+        mark();
+      } catch (e) {
+        /* 사진(dataURL)이 커서 용량을 넘겼을 때 — 사진만 빼고 저장 */
+        try {
+          payload.cards = state.cards.map(c => (c && /^data:/i.test(c.imageSrc || '')) ? Object.assign({}, c, { imageSrc: '' }) : c);
+          localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+          mark();
+        } catch (e2) { /* 저장 실패는 무시 */ }
+      }
     }, 350);
   }
 
@@ -923,10 +1374,13 @@
     state.source = s.source || '';
     state.url = s.url || '';
     state.ratio = s.ratio || '4:5';
-    state.target = s.target || 0;
+    state.target = typeof s.target === 'number' ? s.target : 0;
     state.handle = s.handle || '@your_id';
     state.theme = s.theme || 'dark';
     state.cards = s.cards;
+    state.view = (s.view === 'slide') ? 'slide' : 'grid';
+    state.slide = Math.max(0, Math.min(+(s.slide || 0), s.cards.length - 1));
+    state.photos = Array.isArray(s.photos) ? s.photos.slice(0, 3) : [];
     return true;
   }
 
@@ -989,10 +1443,17 @@
 
     // 디버그/테스트용
     window.CardNewsApp = {
-      state, generate, buildCards, renderAll, exportZip, downloadCard, loadFromUrl,
+      state, generate, buildCards, buildSummaryCards, renderAll, exportZip, downloadCard, loadFromUrl,
       setTheme(t) { state.theme = t; syncControls(); buildPreview(); },
       setRatio(r) { state.ratio = r; syncControls(); buildPreview(); },
-      getCanvases() { return canvases; }
+      setView,
+      goSlide,
+      setCardImage,
+      proxied,
+      imageEl,
+      tempCanvas,
+      getCanvases() { return canvases; },
+      getSlideCanvas() { return slideCv; }
     };
   }
 

@@ -318,13 +318,13 @@
     return meta;
   }
 
-  function toLines(body) {
+  function toLines(body, srcMap) {
     var raw = String(body || '').replace(/\r\n?/g, '\n');
     var chunks = raw.split('\n');
 
     /* 굵은 글씨로 된 소제목 오른쪽에 본문이 붙어 있으면(네이버 뉴스 등) 줄을 나눈다.
        한 줄 안에서 짝을 이룬 굵은 글씨는 문장 속 강조이므로 건드리지 않는다. */
-    var out = [];
+    var out = [], outSrc = [];
     for (var i = 0; i < chunks.length; i += 1) {
       var line = chunks[i];
       var last = line.lastIndexOf('**');
@@ -337,7 +337,7 @@
           pieces = [head + '**', after];
         }
       }
-      for (var q = 0; q < pieces.length; q += 1) out.push(pieces[q]);
+      for (var q = 0; q < pieces.length; q += 1) { out.push(pieces[q]); outSrc.push(i); }
     }
 
     var clean = [];
@@ -346,6 +346,7 @@
       if (!t) continue;
       if (clean.length && clean[clean.length - 1] === t) continue;
       clean.push(t);
+      if (srcMap) srcMap.push(outSrc[k]);
     }
     return clean;
   }
@@ -386,16 +387,163 @@
     for (var p = chosen.start; p <= chosen.end; p += 1) {
       if (flags[p] && !END_MARK.test(lines[p])) paras.push(lines[p]);
     }
-    return { paragraphs: paras, start: chosen.start };
+    return { paragraphs: paras, start: chosen.start, end: chosen.end };
   }
 
   var MAX_CHARS = 6000;      // 카드뉴스 7장에 넣기 좋은 분량
   var MAX_PARAS = 24;
 
+  /* ---------------------------------------------------------------------
+     3-0) 본문 사진(대표 이미지) 뽑기
+     ---------------------------------------------------------------------
+     Jina Reader 는 본문 이미지를 markdown 이미지(![설명](주소))로 남긴다.
+     그중에서 로고·아이콘·1px 트래커·광고 배너·관련기사 썸네일을 걷어내고
+     본문 안에 놓인 사진을 최대 3장 고른다. (카드 배경으로 쓰기 좋은 것)
+     --------------------------------------------------------------------- */
+
+  var IMG_JUNK = /(\/logo|logo\.|logo_|_logo|logos\/|\/icon|icon\.|icon_|_icon|icon\/|sprite|spacer|blank\.|pixel\.|tracker|beacon|favicon|\/css\/|\/common\/|\/static\/|emoji|avatar|btn_|\/btn|button|banner|advert|\/ad\/|\/ads\/|adimg|ad_|sponsor|watermark|placeholder|noimage|no_image|no-image|badge|transparent|1x1)/i;
+
+  var IMG_ALT_JUNK = /^(?:이미지|image|photo|사진|프로필|프로파일|로고|광고|배너|닫기|재생|동영상|아이콘|화살표|더보기|바로가기|구독|멤버십|이벤트|썸네일)$/i;
+
+  var IMG_ALT_AD = /(광고|배너|이벤트|구독|멤버십|프로모|앱 ?설치|다운로드|쿠폰|할인|공모전|설문)/;
+
+  /** 주소에 적힌 크기 힌트(쿼리·경로)로 너무 작은 이미지를 걸러 낸다. */
+  function imgTooSmall(url) {
+    var m = /[?&](?:w|width)=(\d{1,4})/i.exec(url);
+    if (m && +m[1] < 220) return true;
+    m = /[?&](?:h|height)=(\d{1,4})/i.exec(url);
+    if (m && +m[1] < 160) return true;
+    m = /[?&]type=([a-z]{0,3})(\d{1,4})(?:_(\d{1,4}))?/i.exec(url);
+    if (m) {
+      var a = +m[2], b = m[3] ? +m[3] : 0;
+      if (a && a < 220) return true;
+      if (b && b < 160) return true;
+    }
+    // 파일명에 박힌 크기 표시 (_100_, -80x80 등)
+    if (/(?:^|[^\d])(\d{1,3})x(\d{1,3})(?:[^\d]|$)/.test(url)) {
+      var wh = /(?:^|[^\d])(\d{1,3})x(\d{1,3})(?:[^\d]|$)/.exec(url);
+      if (+wh[1] < 220 || +wh[2] < 160) return true;
+    }
+    return false;
+  }
+
+  /** 사진으로 볼 만한 주소인가 (확장자·경로 힌트) */
+  function looksLikePhoto(url) {
+    if (/\.(?:jpe?g|png|webp|gif|avif|bmp)(?:[?#]|$)/i.test(url)) return true;
+    if (/\.img(?:[?#]|$)/i.test(url)) return true;                       // MSN(akamaized)
+    if (/\/(?:photo|photos|image|images|img|cms|mpic|thumbnail|resizer)\//i.test(url)) return true;
+    if (/^https?:\/\/img[\w-]*\./i.test(url)) return true;
+    return false;
+  }
+
+  function isPhotoUrl(url, alt) {
+    if (!/^https?:\/\//i.test(String(url || ''))) return false;
+    if (/\.svg(?:[?#]|$)/i.test(url)) return false;
+    if (IMG_JUNK.test(url)) return false;
+    if (alt && IMG_ALT_JUNK.test(String(alt).trim())) return false;
+    if (alt && IMG_ALT_AD.test(String(alt))) return false;
+    if (imgTooSmall(url)) return false;
+    if (!looksLikePhoto(url)) return false;
+    return true;
+  }
+
+  /** 같은 사진의 다른 크기(_P4 / _T2 / ?type=w773)를 하나로 묶기 위한 키 */
+  function imgKey(url) {
+    var base = String(url).split('#')[0].split('?')[0];
+    var name = base.slice(base.lastIndexOf('/') + 1).toLowerCase();
+    name = name.replace(/\.[a-z0-9]{2,5}$/, '');
+    name = name.replace(/[_\-](?:p|t|s|m|v|w|h)\d{1,3}$/i, '');
+    name = name.replace(/[_\-]\d{1,3}x\d{1,3}$/i, '');
+    return (base.slice(0, base.lastIndexOf('/')) + '/' + name).toLowerCase();
+  }
+
+  /** markdown·HTML 에서 이미지 (주소, 설명, 줄번호, 링크 감싸기) 수집 */
+  function collectImages(body) {
+    var lines = String(body || '').replace(/\r\n?/g, '\n').split('\n');
+    var out = [];
+    for (var i = 0; i < lines.length; i += 1) {
+      var line = lines[i];
+      var m;
+      var re = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
+      while ((m = re.exec(line))) {
+        /* [![사진](주소)](링크) — 링크로 감싼 이미지는 다른 기사·프로필로 가는 썸네일인 경우가 많다 */
+        var wrap = '';
+        if (m.index > 0 && line.charAt(m.index - 1) === '[') {
+          var after = line.slice(m.index + m[0].length);
+          var wm = /^\]\(([^)\s]+)\)/.exec(after);
+          if (wm) wrap = wm[1];
+        }
+        out.push({ url: decodeEntities(m[2]).trim(), alt: decodeEntities(m[1] || '').trim(), line: i, wrap: wrap });
+      }
+      var re2 = /<img[^>]+src=["']([^"']+)["'][^>]*>/gi;
+      while ((m = re2.exec(line))) {
+        var altm = /alt=["']([^"']*)["']/i.exec(m[0]);
+        out.push({ url: decodeEntities(m[1]).trim(), alt: altm ? altm[1] : '', line: i, wrap: '' });
+      }
+    }
+    return out;
+  }
+
+  /** 감싼 링크가 이 기사가 아닌 다른 곳(관련 기사·프로필·광고)을 가리키는가 */
+  function linkElsewhere(wrap, imgUrl, pageUrl) {
+    if (!wrap) return false;
+    if (!/^https?:\/\//i.test(wrap)) return false;
+    var path = function (u) {
+      try { var x = new URL(String(u)); return x.hostname.toLowerCase() + x.pathname; } catch (e) { return String(u); }
+    };
+    var w = path(wrap), p = pageUrl ? path(pageUrl) : '', im = path(imgUrl);
+    if (p && w === p) return false;                      // 이 기사로 돌아오는 링크
+    if (w === im) return false;
+    if (w.indexOf(im) === 0 || im.indexOf(w) === 0) return false;
+    return true;
+  }
+
+  /** 수집한 이미지 후보 → 본문 사진 최대 3장
+      cands[i].line 과 rawLines 는 같은 좌표(본문 원본 줄번호)다. */
+  function pickImages(cands, rawLines, bodyRange, pageUrl) {
+    var start = bodyRange ? bodyRange.start : -1;
+    var end = bodyRange ? bodyRange.end : -1;
+    var seen = {};
+    var scored = [];
+
+    for (var i = 0; i < cands.length; i += 1) {
+      var c = cands[i];
+      if (!isPhotoUrl(c.url, c.alt)) continue;
+      if (linkElsewhere(c.wrap, c.url, pageUrl)) continue;
+      var key = imgKey(c.url);
+      if (seen[key]) continue;
+      seen[key] = true;
+
+      /* 목록 기호로 시작하는 줄은 ‘관련 기사·쇼츠’ 썸네일이다 */
+      var isListItem = /^\s*(?:[*\-+\u2022]|\d+[.)])\s/.test(rawLines[c.line] || '');
+      if (isListItem) continue;
+
+      var sc = 0;
+      var inBody = start >= 0 && c.line >= start && c.line <= end;
+      if (inBody) sc += 6;
+      if (c.alt && c.alt.length >= 5) sc += 1.5;
+      if (c.alt && c.alt.length >= 12) sc += 1;
+      if (/\/(?:photo|cms|mpic|article)\//i.test(c.url)) sc += 1.5;
+      if (/\/resizer\/|\/thumbnail\//i.test(c.url)) sc += 0.5;
+      scored.push({ url: c.url, alt: c.alt, line: c.line, sc: sc, inBody: inBody });
+    }
+
+    scored.sort(function (a, b) { return b.sc - a.sc || a.line - b.line; });
+    var keep = scored.filter(function (s) { return s.inBody; });
+    if (!keep.length) keep = scored.filter(function (s) { return s.sc >= 2; });
+    if (!keep.length) keep = scored.filter(function (s) { return s.sc >= 1; });
+    keep.sort(function (a, b) { return a.line - b.line; });
+
+    var out2 = [];
+    for (var k = 0; k < keep.length && out2.length < 3; k += 1) out2.push(keep[k].url);
+    return out2;
+  }
+
   /** Jina 응답 텍스트 → { title, paragraphs, text } */
   function parseReader(raw) {
     var meta = splitMeta(raw);
-    var lines = toLines(meta.body);
+    var srcMap = [];
+    var lines = toLines(meta.body, srcMap);
     var body = pickBody(lines);
     var paras = body.paragraphs;
 
@@ -427,11 +575,22 @@
 
     var text = (title ? title + '\n\n' : '') + paras.join('\n\n');
 
+    /* 본문 사진 — 본문 덩어리 안에 있는 이미지를 먼저 고른다 */
+    var rawLines = String(meta.body || '').replace(/\r\n?/g, '\n').split('\n');
+    var range = null;
+    if (srcMap.length && body.paragraphs.length) {
+      var a = srcMap[Math.min(body.start, srcMap.length - 1)];
+      var b = srcMap[Math.min(body.end == null ? body.start : body.end, srcMap.length - 1)];
+      range = { start: Math.min(a, b), end: Math.max(a, b) };
+    }
+    var images = pickImages(collectImages(meta.body), rawLines, range, meta.source || '');
+
     return {
       ok: paras.length > 0,
       title: title,
       paragraphs: paras,
       text: text.trim(),
+      images: images,
       chars: paras.reduce(function (a, p) { return a + p.length; }, 0),
       warning: meta.warning || '',
       source: meta.source || ''
@@ -528,10 +687,50 @@
       title: title,
       paragraphs: paras,
       text: joined.trim(),
+      images: pickMsnImages(data),
       chars: paras.reduce(function (a, p) { return a + p.length; }, 0),
       warning: '',
       source: source
     };
+  }
+
+  /** MSN 기사 JSON → 대표 사진 최대 3장 (imageResources 우선, 본문 <img> 보충) */
+  function pickMsnImages(data) {
+    var out = [];
+    var seen = {};
+    var list = Array.isArray(data && data.imageResources) ? data.imageResources : [];
+
+    var scored = [];
+    for (var i = 0; i < list.length; i += 1) {
+      var it = list[i] || {};
+      var url = String(it.url || '').trim();
+      if (!/^https?:\/\//i.test(url)) continue;
+      if (!isPhotoUrl(url, String(it.title || ''))) continue;
+      var w = +it.width || 0, h = +it.height || 0;
+      if (w && w < 400) continue;
+      if (h && h < 250) continue;
+      scored.push({ url: url, area: w * h, i: i });
+    }
+    scored.sort(function (a, b) { return (b.area - a.area) || (a.i - b.i); });
+
+    for (var k = 0; k < scored.length && out.length < 3; k += 1) {
+      var key = imgKey(scored[k].url);
+      if (seen[key]) continue;
+      seen[key] = true;
+      out.push(scored[k].url);
+    }
+
+    if (out.length < 3) {
+      var bodyImg = collectImages(String((data && data.body) || ''));
+      var more = pickImages(bodyImg, [], null);
+      for (var q = 0; q < more.length && out.length < 3; q += 1) {
+        var kk = imgKey(more[q]);
+        if (seen[kk]) continue;
+        seen[kk] = true;
+        out.push(more[q]);
+      }
+    }
+    return out;
   }
 
   /* ---------------------------------------------------------------------
@@ -659,6 +858,10 @@
     parseReader: parseReader,
     readUrl: readUrl,
     message: message,
+    isPhotoUrl: isPhotoUrl,
+    pickImages: pickImages,
+    collectImages: collectImages,
+    pickMsnImages: pickMsnImages,
     stripInline: stripInline,
     isProse: isProse,
     toLines: toLines,

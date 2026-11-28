@@ -56,6 +56,87 @@
     return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
   }
 
+  /* ---------- 사진 (카드 배경용) --------------------------------------- */
+  function imgSize(img) {
+    if (!img) return null;
+    const w = img.width || img.naturalWidth || 0;
+    const h = img.height || img.naturalHeight || 0;
+    return w && h ? { w, h } : null;
+  }
+
+  /** 사진을 영역에 꽉 차게(cover) 잘라 그린다 */
+  function drawCoverCrop(ctx, img, x, y, w, h, focus) {
+    const s = imgSize(img);
+    if (!s) return false;
+    const sc = Math.max(w / s.w, h / s.h);
+    const sw = w / sc, sh = h / sc;
+    const sx = (s.w - sw) / 2;
+    const sy = Math.max(0, Math.min(s.h - sh, (s.h - sh) * (focus == null ? 0.4 : focus)));
+    ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+    return true;
+  }
+
+  /**
+   * 사진 띠 — 카드 위쪽에 사진을 깔고 아래쪽을 테마 배경색으로 부드럽게 넘긴다.
+   * 위쪽에는 같은 색 워시를 엷게 깔아 머리말·배지 글자가 묻히지 않게 한다.
+   * 그린 높이를 돌려준다 (사진이 없으면 0).
+   */
+  function photoBand(ctx, img, W, top, h, cfg) {
+    cfg = cfg || {};
+    if (!imgSize(img)) return 0;
+    const y = Math.max(0, top), hh = Math.max(40, h);
+    const fade = cfg.fade || '#000000';
+    const wash = cfg.wash || fade;
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, y, W, hh); ctx.clip();
+    drawCoverCrop(ctx, img, 0, y, W, hh, cfg.focus);
+
+    // 전체 톤 정리
+    if (cfg.tintA) { ctx.fillStyle = hexA(cfg.tint || '#000000', cfg.tintA); ctx.fillRect(0, y, W, hh); }
+
+    // 위쪽 워시 (머리말이 사진 위에 올 때)
+    const washA = cfg.washA == null ? 0.55 : cfg.washA;
+    if (washA > 0) {
+      const g1 = ctx.createLinearGradient(0, y, 0, y + hh * 0.52);
+      g1.addColorStop(0, hexA(wash, washA));
+      g1.addColorStop(1, hexA(wash, 0));
+      ctx.fillStyle = g1; ctx.fillRect(0, y, W, hh * 0.52);
+    }
+
+    // 아래쪽 → 테마 배경색
+    const f = cfg.fadeFrom == null ? 0.52 : cfg.fadeFrom;
+    const g2 = ctx.createLinearGradient(0, y + hh * f, 0, y + hh);
+    g2.addColorStop(0, hexA(fade, 0));
+    g2.addColorStop(1, hexA(fade, 1));
+    ctx.fillStyle = g2; ctx.fillRect(0, y + hh * f, W, hh * (1 - f));
+    ctx.restore();
+    return hh;
+  }
+
+  /** 사진 위에 강조 숫자 + 설명 (아래쪽 스크림 위) */
+  function statOnPhoto(ctx, card, o) {
+    if (!card.statNum) return false;
+    const W = o.W, pad = o.pad;
+    const base = o.base;
+    const g = ctx.createLinearGradient(0, base - 210, 0, base + 18);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.55, 'rgba(0,0,0,0.42)');
+    g.addColorStop(1, 'rgba(0,0,0,0.74)');
+    ctx.fillStyle = g; ctx.fillRect(0, base - 210, W, 228);
+
+    const size = fitOneLine(ctx, card.statNum, { size: o.size || 100, min: 44, weight: 900, fam: o.fam, maxW: W - pad * 2 });
+    ctx.font = fx(900, size, o.fam || SANS);
+    ctx.fillStyle = o.color || '#FFFFFF';
+    ctx.textAlign = 'left';
+    ctx.fillText(card.statNum, pad, base);
+    if (card.statLabel) {
+      const l = layoutRich(ctx, card.statLabel, { maxW: W - pad * 2, maxLines: 1, sizeMax: 25, sizeMin: 17, weight: 600, lh: 1.4, fam: SANS });
+      drawRich(ctx, l, pad, base + 34, { color: 'rgba(255,255,255,0.92)' });
+    }
+    return true;
+  }
+
   /* ---------- rich text (숫자 강조 + 한글 어절 단위 줄바꿈) ------------- */
   // 단위가 붙은 숫자만 강조 (2026.11 같은 날짜는 % 없이도 잡히지만 무해)
   const NUM_RE = /(\d[\d,]*(?:\.\d+)?\s?(?:%|퍼센트|배|조|억|만|개월|시간|분|초|년|개|명|원|위|대|회|건|달러|포인트|살|세|kg|km|GB|MB|주|일|가지|장|컷|종|곳|단계|배수))/g;
@@ -110,7 +191,7 @@
   }
 
   function trimLine(ctx, line, maxW) {
-    // 끝에 … 붙이기
+    // 끝에 … 붙이기 — 낱말 중간에서 자르지 않고 마지막 온전한 어절까지만 남긴다
     let segs = line.segs.slice();
     const ell = '…';
     const ew = ctx.measureText(ell).width;
@@ -124,6 +205,16 @@
       } else {
         w -= ctx.measureText(last.t).width;
         segs.pop();
+      }
+    }
+    // 어절 중간에서 잘렸으면 그 어절을 통째로 버린다
+    if (segs.length > 1 && line.w + ew > maxW) {
+      let cut = -1;
+      for (let i = segs.length - 1; i >= 0; i--) { if (segs[i].t === ' ') { cut = i; break; } }
+      if (cut > 0) {
+        let nw = 0;
+        for (let i = 0; i < cut; i++) nw += ctx.measureText(segs[i].t).width;
+        if (nw > maxW * 0.45) { segs = segs.slice(0, cut); w = nw; }
       }
     }
     while (segs.length && segs[segs.length - 1].t === ' ') { w -= ctx.measureText(' ').width; segs.pop(); }
@@ -353,23 +444,27 @@
     d1Mast(ctx, W, pad);
 
     if (card.type === 'cover') {
+      /* 사진이 있으면 머리말 아래를 사진으로 채우고 글자를 그 아래로 내린다 */
+      const bh = photoBand(ctx, o.photo, W, 140, tall ? 620 : 360, { fade: C1.bg, tintA: 0.10, washA: 0.66 });
+      const bandBottom = bh ? 140 + bh : 0;
+
       const badgeTxt = card.badge || '카드뉴스';
       d1Badge(ctx, pad, 176, badgeTxt, false);
 
-      const titleTop = tall ? 320 : 286;
-      const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: tall ? 5 : 4, sizeMax: tall ? 118 : 108, sizeMin: 54, weight: 900, lh: 1.13 });
+      const titleTop = bh ? bandBottom + 56 : (tall ? 320 : 286);
+      const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: bh ? (tall ? 4 : 3) : (tall ? 5 : 4), sizeMax: tall ? 118 : 108, sizeMin: 54, weight: 900, lh: 1.13 });
       drawRich(ctx, lay, pad, titleTop + lay.size * 0.92, { color: C1.white, numColor: C1.num });
 
       let cursor = titleTop + lay.height + 52;
-      const statTop = H - 392;
       if (card.body) {
-        const avail = (card.statNum ? statTop - 26 : H - 210) - cursor;
+        const avail = (card.statNum && !bh ? H - 392 - 26 : H - 210) - cursor;
         const maxLines = Math.max(1, Math.min(tall ? 5 : 4, Math.floor(avail / 58)));
         const sub = layoutRich(ctx, card.body, { maxW: W - pad * 2 - 30, maxLines, sizeMax: 35, sizeMin: 24, weight: 500, lh: 1.62 });
         drawRich(ctx, sub, pad, cursor + sub.size, { color: C1.sub, numColor: C1.num });
       }
-      if (card.statNum) d1Stat(ctx, W, H, card, pad, H - 300, H - 236);
-      else {
+      if (card.statNum && bh) statOnPhoto(ctx, card, { W, pad, base: bandBottom - 46, color: C1.red, size: 96 });
+      else if (card.statNum) d1Stat(ctx, W, H, card, pad, H - 300, H - 236);
+      else if (!bh) {
         ctx.font = fx(700, 23, SANS); ctx.fillStyle = C1.dim;
         spaced(ctx, '옆으로 넘겨보세요', pad, H - 214, 1.2);
         ctx.fillStyle = C1.red; ctx.fillText('→', pad + 210, H - 214);
@@ -379,30 +474,39 @@
     }
 
     if (card.type === 'content') {
-      d1Badge(ctx, pad, 150, card.badge || ('핵심 ' + p2(index)), true);
-      ctx.save();
-      ctx.textAlign = 'right'; ctx.font = fx(900, 300, SANS);
-      ctx.fillStyle = 'rgba(255,255,255,0.045)';
-      ctx.fillText(p2(index), W - pad + 12, 420);
-      ctx.restore();
+      const bh = photoBand(ctx, o.photo, W, 132, tall ? 520 : 326, { fade: C1.bg, tintA: 0.10, washA: 0.62 });
+      const bandBottom = bh ? 132 + bh : 0;
 
-      const titleTop = tall ? 340 : 316;
+      d1Badge(ctx, pad, 150, card.badge || ('핵심 ' + p2(index)), true);
+      if (!bh) {
+        ctx.save();
+        ctx.textAlign = 'right'; ctx.font = fx(900, 300, SANS);
+        ctx.fillStyle = 'rgba(255,255,255,0.045)';
+        ctx.fillText(p2(index), W - pad + 12, 420);
+        ctx.restore();
+      }
+
+      const titleTop = bh ? bandBottom + 50 : (tall ? 340 : 316);
       const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: 3, sizeMax: tall ? 104 : 84, sizeMin: 46, weight: 900, lh: 1.16 });
       ctx.fillStyle = C1.red; ctx.fillRect(pad, titleTop - 32, 72, 8);
       drawRich(ctx, lay, pad, titleTop + lay.size * 0.9, { color: C1.white, numColor: C1.num });
 
       const bodyTop = titleTop + lay.height + 54;
-      const bottom = card.statNum ? H - 420 : H - 210;
+      const bottom = card.statNum && !bh ? H - 420 : H - 210;
       const bodySize = tall ? 40 : 34;
       const maxLines = Math.max(1, Math.floor((bottom - bodyTop) / (bodySize * 1.72)));
       const body = layoutRich(ctx, card.body, { maxW: W - pad * 2, maxLines, sizeMax: bodySize, sizeMin: 19, weight: 500, lh: 1.72 });
       drawRich(ctx, body, pad, bodyTop + body.size, { color: C1.sub, numColor: C1.num });
 
+
       if (card.statNum) {
-        const nb = Math.min(H - 262, bodyTop + body.height + 210);
-        ctx.strokeStyle = 'rgba(255,255,255,0.13)'; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(pad, nb - 110); ctx.lineTo(W - pad, nb - 110); ctx.stroke();
-        d1Stat(ctx, W, H, card, pad, nb, nb + 64);
+        if (bh) statOnPhoto(ctx, card, { W, pad, base: bandBottom - 46, color: C1.red, size: 96 });
+        else {
+          const nb = Math.min(H - 262, bodyTop + body.height + 210);
+          ctx.strokeStyle = 'rgba(255,255,255,0.13)'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(pad, nb - 110); ctx.lineTo(W - pad, nb - 110); ctx.stroke();
+          d1Stat(ctx, W, H, card, pad, nb, nb + 64);
+        }
       }
       d1Foot(ctx, W, H, handle, index, total);
       return;
@@ -510,8 +614,11 @@
       ctx.strokeStyle = 'rgba(208,126,104,0.6)'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(W / 2 - 34, 176); ctx.lineTo(W / 2 + 34, 176); ctx.stroke();
 
-      const titleTop = tall ? 360 : 300;
-      const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: 4, sizeMax: tall ? 98 : 90, sizeMin: 50, weight: 700, fam: SERIF, lh: 1.42 });
+      const bh = photoBand(ctx, o.photo, W, 196, tall ? 520 : 300, { fade: C2.bg, tintA: 0.06, washA: 0.5, focus: 0.45 });
+      const bandBottom = bh ? 196 + bh : 0;
+
+      const titleTop = bh ? bandBottom + 78 : (tall ? 360 : 300);
+      const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: bh ? (tall ? 4 : 2) : 4, sizeMax: tall ? 98 : 90, sizeMin: 50, weight: 700, fam: SERIF, lh: 1.42 });
       drawRich(ctx, lay, W / 2, titleTop, { color: C2.deep, align: 'center', numColor: C2.num });
 
       let cursor = titleTop + lay.height + 26;
@@ -520,14 +627,16 @@
       cursor += 66;
 
       if (card.body) {
-        const avail = (card.statNum ? H - 430 : H - 210) - cursor;
+        const avail = (card.statNum && !bh ? H - 430 : H - 210) - cursor;
         const maxLines = Math.max(1, Math.min(tall ? 5 : 4, Math.floor(avail / 54)));
         const sub = layoutRich(ctx, card.body, { maxW: W - pad * 2 - 40, maxLines, sizeMax: 31, sizeMin: 23, weight: 400, lh: 1.8 });
         drawRich(ctx, sub, W / 2, cursor + sub.size, { color: C2.sub, align: 'center', numColor: C2.num });
         cursor += sub.height;
       }
 
-      if (card.statNum) {
+      if (card.statNum && bh) {
+        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 44, color: '#FFFFFF', size: 92, fam: SERIF });
+      } else if (card.statNum) {
         ctx.strokeStyle = 'rgba(208,126,104,0.5)'; ctx.lineWidth = 1.2;
         ctx.beginPath(); ctx.arc(W / 2, H - 330, 112, 0, Math.PI * 2); ctx.stroke();
         const s = fitOneLine(ctx, card.statNum, { size: 92, min: 48, weight: 600, fam: SERIF, maxW: 190 });
@@ -558,18 +667,23 @@
       ctx.strokeStyle = 'rgba(208,126,104,0.45)'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(p, 268); ctx.lineTo(W - p, 268); ctx.stroke();
 
-      const titleTop = tall ? 360 : 336;
+      const bh = photoBand(ctx, o.photo, W, 284, tall ? 460 : 270, { fade: C2.bg, tintA: 0.06, washA: 0.45, focus: 0.45 });
+      const bandBottom = bh ? 284 + bh : 0;
+
+      const titleTop = bh ? bandBottom + 40 : (tall ? 360 : 336);
       const lay = layoutRich(ctx, card.title, { maxW: W - p * 2, maxLines: 3, sizeMax: tall ? 86 : 68, sizeMin: 42, weight: 700, fam: SERIF, lh: 1.46 });
       drawRich(ctx, lay, p, titleTop + lay.size * 0.8, { color: C2.deep, numColor: C2.num });
 
       const bodyTop = titleTop + lay.height + 64;
-      const bottom = card.statNum ? H - 500 : H - 220;
+      const bottom = card.statNum && !bh ? H - 500 : H - 220;
       const bodySize = tall ? 37 : 31;
       const maxLines = Math.max(1, Math.floor((bottom - bodyTop) / (bodySize * 1.95)));
       const body = layoutRich(ctx, card.body, { maxW: W - p * 2, maxLines, sizeMax: bodySize, sizeMin: 18, weight: 400, lh: 1.95 });
       drawRich(ctx, body, p, bodyTop + body.size, { color: C2.sub, numColor: C2.num });
 
-      if (card.statNum) {
+      if (card.statNum && bh) {
+        statOnPhoto(ctx, card, { W, pad: p, base: bandBottom - 40, color: '#FFFFFF', size: 88, fam: SERIF });
+      } else if (card.statNum) {
         const cy = Math.min(H - 356, bodyTop + body.height + 200);
         ctx.strokeStyle = 'rgba(208,126,104,0.45)'; ctx.lineWidth = 1.2;
         ctx.beginPath(); ctx.arc(W / 2, cy, 104, 0, Math.PI * 2); ctx.stroke();
@@ -734,8 +848,11 @@
       const grad = ctx.createLinearGradient(W * 0.12, 0, W * 0.88, 0);
       grad.addColorStop(0, '#00E5FF'); grad.addColorStop(0.5, '#B388FF'); grad.addColorStop(1, '#FF2E9A');
 
-      const titleTop = tall ? 400 : 340;
-      const lay = layoutRich(ctx, card.title, { maxW: W - 160, maxLines: 4, sizeMax: tall ? 118 : 110, sizeMin: 52, weight: 900, lh: 1.14 });
+      const bh = photoBand(ctx, o.photo, W, 176, tall ? 600 : 380, { fade: C3.bg, tintA: 0.16, washA: 0.6 });
+      const bandBottom = bh ? 176 + bh : 0;
+
+      const titleTop = bh ? bandBottom + 62 : (tall ? 400 : 340);
+      const lay = layoutRich(ctx, card.title, { maxW: W - 160, maxLines: bh ? (tall ? 4 : 3) : 4, sizeMax: tall ? 118 : 110, sizeMin: 52, weight: 900, lh: 1.14 });
       ctx.save();
       ctx.shadowColor = 'rgba(120,60,255,0.8)'; ctx.shadowBlur = 26;
       drawRich(ctx, lay, W / 2, titleTop, { grad: grad, align: 'center' });
@@ -743,13 +860,14 @@
 
       let cursor = titleTop + lay.height + 34;
       if (card.body) {
-        const avail = (card.statNum ? H - 400 : H - 190) - cursor;
+        const avail = (card.statNum && !bh ? H - 400 : H - 190) - cursor;
         const maxLines = Math.max(1, Math.min(tall ? 5 : 4, Math.floor(avail / 52)));
         const sub = layoutRich(ctx, card.body, { maxW: W - 200, maxLines, sizeMax: 31, sizeMin: 22, weight: 500, lh: 1.62 });
         drawRich(ctx, sub, W / 2, cursor + sub.size, { color: C3.sub, align: 'center', numColor: C3.num });
         cursor += sub.height;
       }
-      if (card.statNum) d3Stat(ctx, W, H, card, H - 300);
+      if (card.statNum && bh) statOnPhoto(ctx, card, { W, pad: 80, base: bandBottom - 44, color: '#FFFFFF', size: 92 });
+      else if (card.statNum) d3Stat(ctx, W, H, card, H - 300);
 
       ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = fx(600, 21, SANS); ctx.textAlign = 'center';
       spaced(ctx, 'S L I D E  →', W / 2, H - 156, 1.5, 'center');
@@ -762,7 +880,10 @@
       d3Progress(ctx, W, index, total);
       d3Pill(ctx, 80, 128, card.badge || ('EP.' + p2(index)), W);
 
-      const titleTop = tall ? 330 : 300;
+      const bh = photoBand(ctx, o.photo, W, 190, tall ? 520 : 320, { fade: C3.bg, tintA: 0.16, washA: 0.55 });
+      const bandBottom = bh ? 190 + bh : 0;
+
+      const titleTop = bh ? bandBottom + 46 : (tall ? 330 : 300);
       const lay = layoutRich(ctx, card.title, { maxW: W - 160, maxLines: 3, sizeMax: tall ? 106 : 84, sizeMin: 46, weight: 900, lh: 1.18, align: 'center' });
       ctx.save();
       ctx.shadowColor = 'rgba(0,229,255,0.6)'; ctx.shadowBlur = 24;
@@ -770,13 +891,15 @@
       ctx.restore();
 
       const bodyTop = titleTop + lay.height + 52;
-      const bottom = card.statNum ? H - 400 : H - 180;
+      const bottom = card.statNum && !bh ? H - 400 : H - 180;
       const bodySize = tall ? 40 : 31;
       const maxLines = Math.max(1, Math.floor((bottom - bodyTop) / (bodySize * 1.7)));
       const body = layoutRich(ctx, card.body, { maxW: W - 170, maxLines, sizeMax: bodySize, sizeMin: 21, weight: 500, lh: 1.7 });
       drawRich(ctx, body, W / 2, bodyTop + body.size, { color: C3.sub, align: 'center', numColor: C3.cyan });
 
-      if (card.statNum) {
+      if (card.statNum && bh) {
+        statOnPhoto(ctx, card, { W, pad: 80, base: bandBottom - 40, color: '#FFFFFF', size: 88 });
+      } else if (card.statNum) {
         const cy = Math.min(H - 258, bodyTop + body.height + 250);
         ctx.strokeStyle = 'rgba(0,229,255,0.35)'; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.moveTo(140, cy - 134); ctx.lineTo(W - 140, cy - 134); ctx.stroke();
@@ -870,21 +993,27 @@
 
     if (card.type === 'cover') {
       d4Top(ctx, W, index, total, 'CARD NEWS');
-      const top = tall ? 300 : 250;
+
+      const bh = photoBand(ctx, o.photo, W, 146, tall ? 540 : 300, { fade: C4.bg, tintA: 0.04, washA: 0.62, focus: 0.45 });
+      const bandBottom = bh ? 146 + bh : 0;
+
+      const top = bh ? bandBottom + 30 : (tall ? 300 : 250);
       ctx.fillStyle = C4.accent; ctx.fillRect(pad, top, 20, 20);
 
-      const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: 4, sizeMax: tall ? 96 : 86, sizeMin: 48, weight: 700, lh: 1.32 });
+      const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: bh ? 3 : 4, sizeMax: tall ? 96 : 86, sizeMin: 48, weight: 700, lh: 1.32 });
       drawRich(ctx, lay, pad, top + 56 + lay.size, { color: C4.ink, numColor: C4.accent });
 
       let cursor = top + 56 + lay.height + 44;
       if (card.body) {
-        const avail = (card.statNum ? H - 420 : H - 200) - cursor;
+        const avail = (card.statNum && !bh ? H - 420 : H - 200) - cursor;
         const maxLines = Math.max(1, Math.min(tall ? 5 : 4, Math.floor(avail / 57)));
         const sub = layoutRich(ctx, card.body, { maxW: W - pad * 2 - 90, maxLines, sizeMax: 30, sizeMin: 22, weight: 400, lh: 1.9 });
         drawRich(ctx, sub, pad, cursor + sub.size, { color: C4.sub, numColor: C4.accent });
       }
 
-      if (card.statNum) {
+      if (card.statNum && bh) {
+        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 40, color: '#FFFFFF', size: 88 });
+      } else if (card.statNum) {
         const s = fitOneLine(ctx, card.statNum, { size: 132, min: 56, weight: 200, maxW: W - pad * 2 });
         ctx.font = fx(200, s, SANS); ctx.fillStyle = C4.ink;
         ctx.fillText(card.statNum, pad, H - 320);
@@ -903,18 +1032,24 @@
 
     if (card.type === 'content') {
       d4Top(ctx, W, index, total, card.badge || 'POINT ' + p2(index));
-      const top = tall ? 330 : 300;
+
+      const bh = photoBand(ctx, o.photo, W, 146, tall ? 500 : 280, { fade: C4.bg, tintA: 0.04, washA: 0.55, focus: 0.45 });
+      const bandBottom = bh ? 146 + bh : 0;
+
+      const top = bh ? bandBottom + 26 : (tall ? 330 : 300);
       const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: 3, sizeMax: tall ? 82 : 62, sizeMin: 40, weight: 700, lh: 1.42 });
       drawRich(ctx, lay, pad, top + lay.size, { color: C4.ink, numColor: C4.accent });
 
       const bodyTop = top + lay.height + 50;
-      const bottom = card.statNum ? H - 430 : H - 210;
+      const bottom = card.statNum && !bh ? H - 430 : H - 210;
       const bodySize = tall ? 38 : 30;
       const maxLines = Math.max(1, Math.floor((bottom - bodyTop) / (bodySize * 1.95)));
       const body = layoutRich(ctx, card.body, { maxW: W - pad * 2 - 30, maxLines, sizeMax: bodySize, sizeMin: 21, weight: 400, lh: 1.95 });
       drawRich(ctx, body, pad, bodyTop + body.size, { color: C4.sub, numColor: C4.accent });
 
-      if (card.statNum) {
+      if (card.statNum && bh) {
+        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 36, color: '#FFFFFF', size: 84 });
+      } else if (card.statNum) {
         const top = Math.min(H - 400, bodyTop + body.height + 150);
         ctx.fillStyle = C4.hair; ctx.fillRect(pad, top, W - pad * 2, 1);
         const s = fitOneLine(ctx, card.statNum, { size: 122, min: 54, weight: 200, maxW: W - pad * 2 });
@@ -1048,8 +1183,11 @@
       d5Mast(ctx, W);
       d5Kicker(ctx, pad, 182, card.badge || '카드뉴스');
 
-      const titleTop = tall ? 350 : 300;
-      const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: 4, sizeMax: tall ? 96 : 88, sizeMin: 48, weight: 800, fam: SERIF, lh: 1.3 });
+      const bh = photoBand(ctx, o.photo, W, 158, tall ? 560 : 360, { fade: C5.bg, tintA: 0.05, washA: 0.62, focus: 0.45 });
+      const bandBottom = bh ? 158 + bh : 0;
+
+      const titleTop = bh ? bandBottom + 48 : (tall ? 350 : 300);
+      const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: bh ? 3 : 4, sizeMax: tall ? 96 : 88, sizeMin: 48, weight: 800, fam: SERIF, lh: 1.3 });
       drawRich(ctx, lay, pad, titleTop + lay.size, { color: C5.ink, numColor: C5.red });
 
       let cursor = titleTop + lay.height + 26;
@@ -1057,14 +1195,16 @@
       cursor += 44;
 
       if (card.body) {
-        const avail = (card.statNum ? H - 470 : H - 200) - cursor;
+        const avail = (card.statNum && !bh ? H - 470 : H - 200) - cursor;
         const maxLines = Math.max(1, Math.min(tall ? 5 : 4, Math.floor(avail / 54)));
         const sub = layoutRich(ctx, card.body, { maxW: W - pad * 2, maxLines, sizeMax: 30, sizeMin: 21, weight: 400, fam: SERIF, lh: 1.8 });
         drawRich(ctx, sub, pad, cursor + sub.size, { color: C5.sub, numColor: C5.red });
         cursor += sub.height;
       }
 
-      if (card.statNum) d5Stat(ctx, W, H, card, H - 360, 200);
+      if (card.statNum && bh) {
+        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 40, color: '#FFFFFF', size: 88, fam: SERIF });
+      } else if (card.statNum) d5Stat(ctx, W, H, card, H - 360, 200);
       else {
         ctx.font = fx(500, 19, SANS); ctx.fillStyle = C5.faint;
         spaced(ctx, '다음 장에서 계속', pad, H - 210, 1.6);
@@ -1077,7 +1217,10 @@
       d5MastMini(ctx, W, 'POINT ' + p2(index));
       d5Kicker(ctx, pad, 168, card.badge || ('핵심 ' + p2(index)));
 
-      const titleTop = tall ? 340 : 306;
+      const bh = photoBand(ctx, o.photo, W, 132, tall ? 520 : 310, { fade: C5.bg, tintA: 0.05, washA: 0.55, focus: 0.45 });
+      const bandBottom = bh ? 132 + bh : 0;
+
+      const titleTop = bh ? bandBottom + 44 : (tall ? 340 : 306);
       const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: 3, sizeMax: tall ? 82 : 62, sizeMin: 40, weight: 800, fam: SERIF, lh: 1.36 });
       drawRich(ctx, lay, pad, titleTop + lay.size, { color: C5.ink, numColor: C5.red });
 
@@ -1085,13 +1228,15 @@
       ctx.fillStyle = 'rgba(29,29,29,0.5)'; ctx.fillRect(pad, bodyTop, W - pad * 2, 1);
       bodyTop += 40;
 
-      const bottom = card.statNum ? H - 400 : H - 190;
+      const bottom = card.statNum && !bh ? H - 400 : H - 190;
       const bodySize = tall ? 36 : 30;
       const maxLines = Math.max(1, Math.floor((bottom - bodyTop) / (bodySize * 1.9)));
       const body = layoutRich(ctx, card.body, { maxW: W - pad * 2, maxLines, sizeMax: bodySize, sizeMin: 18, weight: 400, fam: SERIF, lh: 1.9 });
       drawRich(ctx, body, pad, bodyTop + body.size, { color: C5.sub, numColor: C5.red });
 
-      if (card.statNum) {
+      if (card.statNum && bh) {
+        statOnPhoto(ctx, card, { W, pad, base: bandBottom - 40, color: '#FFFFFF', size: 84, fam: SERIF });
+      } else if (card.statNum) {
         const top = Math.min(H - 300, bodyTop + body.height + 110);
         d5Stat(ctx, W, H, card, top, 178);
       }
@@ -1138,6 +1283,109 @@
   }
 
   /* =====================================================================
+     요약 카드 (3장 요약 모드의 02장) — 테마 색만 갈아입고 같은 구조로 그린다
+     ===================================================================== */
+  const SUM_PAL = {
+    dark:    { ink: '#FFFFFF', sub: '#ACACB8', chip: '#FF2D2D', chipInk: '#0B0B0F', fam: SANS, weight: 800, rul: 'rgba(255,255,255,0.16)' },
+    pastel:  { ink: '#3B2A2C', sub: '#7A6668', chip: '#D07E68', chipInk: '#FBF3EE', fam: SERIF, weight: 700, rul: 'rgba(208,126,104,0.45)' },
+    neon:    { ink: '#F3EFFF', sub: '#B4ADD2', chip: '#00E5FF', chipInk: '#08060F', fam: SANS, weight: 800, rul: 'rgba(0,229,255,0.35)' },
+    minimal: { ink: '#141414', sub: '#6E6E6E', chip: '#FF4D2E', chipInk: '#FFFFFF', fam: SANS, weight: 700, rul: '#E6E6E6' },
+    news:    { ink: '#161616', sub: '#3D3D3D', chip: '#0B5D3B', chipInk: '#F7F5EE', fam: SERIF, weight: 800, rul: 'rgba(29,29,29,0.45)' }
+  };
+
+  function drawSummary(ctx, o) {
+    const { W, H, card, index, total, handle, theme } = o;
+    const id = theme || 'dark';
+    const P = SUM_PAL[id] || SUM_PAL.dark;
+    const tall = H > 1500;
+    const pad = id === 'dark' ? 84 : id === 'minimal' ? 96 : id === 'news' ? 76 : 108;
+    let headBottom = 150;
+
+    /* 배경 + 머리말 */
+    if (id === 'dark') { d1Bg(ctx, W, H); d1Mast(ctx, W, pad); headBottom = 140; }
+    else if (id === 'pastel') { d2Bg(ctx, W, H); d2Frame(ctx, W, H); headBottom = 200; }
+    else if (id === 'neon') { d3Bg(ctx, W, H); d3Corners(ctx, W, H); d3Progress(ctx, W, index, total); headBottom = 140; }
+    else if (id === 'minimal') { ctx.fillStyle = C4.bg; ctx.fillRect(0, 0, W, H); d4Top(ctx, W, index, total, card.badge || 'SUMMARY'); headBottom = 150; }
+    else { d5Bg(ctx, W, H); d5MastMini(ctx, W, 'SUMMARY'); headBottom = 150; }
+
+    /* 라벨 */
+    const label = String(card.badge || '3줄 요약');
+    ctx.font = fx(800, 21, SANS);
+    ctx.fillStyle = (id === 'minimal') ? C4.accent : (id === 'news') ? C5.accent : P.chip;
+    if (id === 'pastel') {
+      ctx.textAlign = 'center'; spaced(ctx, label, W / 2, headBottom + 46, 3, 'center'); ctx.textAlign = 'left';
+    } else {
+      spaced(ctx, label, pad, headBottom + 44, 2.6);
+    }
+
+    /* 제목 */
+    const titleTop = headBottom + 86;
+    const lay = layoutRich(ctx, card.title, {
+      maxW: W - pad * 2, maxLines: 2, sizeMax: tall ? 92 : 74, sizeMin: 40,
+      weight: 900, fam: P.fam, lh: 1.3
+    });
+    const titleY = titleTop + lay.size * 0.95;
+    drawRich(ctx, lay, id === 'pastel' ? W / 2 : pad, titleY, { color: P.ink, align: id === 'pastel' ? 'center' : 'left', numColor: P.chip });
+
+    const ruleY = titleTop + lay.height + 30;
+    ctx.fillStyle = P.rul; ctx.fillRect(pad, ruleY, W - pad * 2, id === 'news' ? 2 : 1.5);
+
+    /* 3줄 */
+    const rows = (card.bullets || []).slice(0, 3).map(t => String(t).trim()).filter(Boolean);
+    if (!rows.length) {
+      if (id === 'dark') d1Foot(ctx, W, H, handle, index, total);
+      else if (id === 'pastel') { d2Foot(ctx, W, H, handle, index, total); d2Dots(ctx, W, index, total, H - 152); }
+      else if (id === 'neon') d3Foot(ctx, W, H, handle, index, total);
+      else if (id === 'minimal') d4Foot(ctx, W, H, handle, index, total);
+      else d5Foot(ctx, W, H, handle, index, total);
+      return;
+    }
+
+    const rowSize = tall ? 40 : 33;
+    const lhRate = (id === 'pastel' || id === 'news') ? 1.72 : 1.6;
+    const lh = rowSize * lhRate;
+    const chip = Math.round(rowSize * 1.55);
+    const textX = pad + chip + 26;
+
+    const laid = rows.map(t => layoutRich(ctx, t, {
+      maxW: W - textX - pad, maxLines: 2, sizeMax: rowSize, sizeMin: 21,
+      weight: P.weight, fam: P.fam, lh: lhRate
+    }));
+    const rowH = laid.map(l => Math.max(l.lines.length * lh, chip));
+    const bandTop = ruleY + 44;
+    const bandBottom = H - 200;
+    const sum = rowH.reduce((a, b) => a + b, 0);
+    let gap = rows.length > 1 ? (bandBottom - bandTop - sum) / (rows.length - 1) : 0;
+    gap = Math.max(18, Math.min(gap, tall ? 120 : 92));
+    let y = bandTop + Math.max(0, (bandBottom - bandTop - (sum + gap * (rows.length - 1))) / 2);
+
+    laid.forEach((l, i) => {
+      const rh = rowH[i];
+      /* 번호 칩 */
+      ctx.fillStyle = P.chip;
+      if (id === 'minimal' || id === 'news') rr(ctx, pad, y + 2, chip, chip, 0);
+      else rr(ctx, pad, y + 2, chip, chip, id === 'pastel' ? chip / 2 : 10);
+      ctx.fill();
+      ctx.fillStyle = P.chipInk;
+      ctx.font = fx(800, Math.round(chip * 0.42), P.fam);
+      ctx.textAlign = 'center';
+      ctx.fillText(p2(i + 1), pad + chip / 2, y + 2 + chip * 0.66);
+      ctx.textAlign = 'left';
+
+      /* 본문 */
+      const textBaseline = y + 2 + (chip - l.lines.length * lh) / 2 + l.size * 0.86;
+      drawRich(ctx, l, textX, textBaseline, { color: P.sub, numColor: P.chip });
+      y += rh + gap;
+    });
+
+    if (id === 'dark') d1Foot(ctx, W, H, handle, index, total);
+    else if (id === 'pastel') { d2Foot(ctx, W, H, handle, index, total); d2Dots(ctx, W, index, total, H - 152); }
+    else if (id === 'neon') d3Foot(ctx, W, H, handle, index, total);
+    else if (id === 'minimal') d4Foot(ctx, W, H, handle, index, total);
+    else d5Foot(ctx, W, H, handle, index, total);
+  }
+
+  /* =====================================================================
      registry + public render
      ===================================================================== */
   const THEMES = {
@@ -1178,13 +1426,16 @@
     ctx.clearRect(0, 0, W, H);
     const theme = THEMES[opts.theme] || THEMES.dark;
     ctx.save();
-    theme.draw(ctx, {
+    const info = {
       W, H, card: opts.card, index: opts.index, total: opts.total,
-      handle: opts.handle || '@your_id', ratio: opts.ratio
-    });
+      handle: opts.handle || '@your_id', ratio: opts.ratio,
+      theme: theme.id, photo: opts.photo || null
+    };
+    if (opts.card && opts.card.type === 'summary') drawSummary(ctx, info);
+    else theme.draw(ctx, info);
     ctx.restore();
     return { W, H };
   }
 
-  global.CardNewsRender = { renderCard, THEMES, dims, SANS, SERIF };
+  global.CardNewsRender = { renderCard, THEMES, dims, SANS, SERIF, drawSummary };
 })(window);
