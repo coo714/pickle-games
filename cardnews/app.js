@@ -1323,8 +1323,8 @@
      확대 모달
      ===================================================================== */
   function openZoom(i) {
-    const src = canvases[i];
-    if (!src) return;
+    if (!state.cards[i]) return;
+    const src = (state.view === 'grid' && canvases[i]) ? canvases[i] : tempCanvas(i);
     const m = $('#zoomModal');
     const cv = $('#zoomCanvas');
     cv.width = src.width; cv.height = src.height;
