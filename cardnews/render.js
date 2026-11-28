@@ -119,11 +119,11 @@
     if (!card.statNum) return false;
     const W = o.W, pad = o.pad;
     const base = o.base;
-    const g = ctx.createLinearGradient(0, base - 210, 0, base + 18);
+    const g = ctx.createLinearGradient(0, base - 215, 0, base + 62);
     g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(0.55, 'rgba(0,0,0,0.42)');
+    g.addColorStop(0.5, 'rgba(0,0,0,0.40)');
     g.addColorStop(1, 'rgba(0,0,0,0.74)');
-    ctx.fillStyle = g; ctx.fillRect(0, base - 210, W, 228);
+    ctx.fillStyle = g; ctx.fillRect(0, base - 215, W, 282);
 
     const size = fitOneLine(ctx, card.statNum, { size: o.size || 100, min: 44, weight: 900, fam: o.fam, maxW: W - pad * 2 });
     ctx.font = fx(900, size, o.fam || SANS);
@@ -614,11 +614,11 @@
       ctx.strokeStyle = 'rgba(208,126,104,0.6)'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(W / 2 - 34, 176); ctx.lineTo(W / 2 + 34, 176); ctx.stroke();
 
-      const bh = photoBand(ctx, o.photo, W, 196, tall ? 520 : 300, { fade: C2.bg, tintA: 0.06, washA: 0.5, focus: 0.45 });
+      const bh = photoBand(ctx, o.photo, W, 196, tall ? 520 : 252, { fade: C2.bg, tintA: 0.06, washA: 0.5, fadeFrom: 0.42, focus: 0.45 });
       const bandBottom = bh ? 196 + bh : 0;
 
       const titleTop = bh ? bandBottom + 86 : (tall ? 360 : 300);
-      const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: bh ? (tall ? 4 : 2) : 4, sizeMax: tall ? 98 : 90, sizeMin: 50, weight: 700, fam: SERIF, lh: 1.42 });
+      const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: bh ? (tall ? 4 : 3) : 4, sizeMax: tall ? 98 : 90, sizeMin: 50, weight: 700, fam: SERIF, lh: 1.42 });
       drawRich(ctx, lay, W / 2, titleTop, { color: C2.deep, align: 'center', numColor: C2.num });
 
       let cursor = titleTop + lay.height + 26;
@@ -667,7 +667,7 @@
       ctx.strokeStyle = 'rgba(208,126,104,0.45)'; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(p, 268); ctx.lineTo(W - p, 268); ctx.stroke();
 
-      const bh = photoBand(ctx, o.photo, W, 284, tall ? 460 : 270, { fade: C2.bg, tintA: 0.06, washA: 0.45, focus: 0.45 });
+      const bh = photoBand(ctx, o.photo, W, 284, tall ? 460 : 270, { fade: C2.bg, tintA: 0.06, washA: 0.45, fadeFrom: 0.46, focus: 0.45 });
       const bandBottom = bh ? 284 + bh : 0;
 
       const titleTop = bh ? bandBottom + 40 : (tall ? 360 : 336);
@@ -994,7 +994,7 @@
     if (card.type === 'cover') {
       d4Top(ctx, W, index, total, 'CARD NEWS');
 
-      const bh = photoBand(ctx, o.photo, W, 146, tall ? 540 : 300, { fade: C4.bg, tintA: 0.04, washA: 0.62, focus: 0.45 });
+      const bh = photoBand(ctx, o.photo, W, 146, tall ? 540 : 300, { fade: C4.bg, tintA: 0.04, washA: 0.62, fadeFrom: 0.46, focus: 0.45 });
       const bandBottom = bh ? 146 + bh : 0;
 
       const top = bh ? bandBottom + 42 : (tall ? 300 : 250);
@@ -1033,7 +1033,7 @@
     if (card.type === 'content') {
       d4Top(ctx, W, index, total, card.badge || 'POINT ' + p2(index));
 
-      const bh = photoBand(ctx, o.photo, W, 146, tall ? 500 : 280, { fade: C4.bg, tintA: 0.04, washA: 0.55, focus: 0.45 });
+      const bh = photoBand(ctx, o.photo, W, 146, tall ? 500 : 280, { fade: C4.bg, tintA: 0.04, washA: 0.55, fadeFrom: 0.46, focus: 0.45 });
       const bandBottom = bh ? 146 + bh : 0;
 
       const top = bh ? bandBottom + 26 : (tall ? 330 : 300);
@@ -1181,10 +1181,10 @@
 
     if (card.type === 'cover') {
       d5Mast(ctx, W);
-      d5Kicker(ctx, pad, 182, card.badge || '카드뉴스');
 
-      const bh = photoBand(ctx, o.photo, W, 158, tall ? 560 : 360, { fade: C5.bg, tintA: 0.05, washA: 0.62, focus: 0.45 });
+      const bh = photoBand(ctx, o.photo, W, 158, tall ? 560 : 360, { fade: C5.bg, tintA: 0.05, washA: 0.62, fadeFrom: 0.46, focus: 0.45 });
       const bandBottom = bh ? 158 + bh : 0;
+      d5Kicker(ctx, pad, 182, card.badge || '카드뉴스');
 
       const titleTop = bh ? bandBottom + 66 : (tall ? 350 : 300);
       const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: bh ? 3 : 4, sizeMax: tall ? 96 : 88, sizeMin: 48, weight: 800, fam: SERIF, lh: 1.3 });
@@ -1215,10 +1215,10 @@
 
     if (card.type === 'content') {
       d5MastMini(ctx, W, 'POINT ' + p2(index));
-      d5Kicker(ctx, pad, 168, card.badge || ('핵심 ' + p2(index)));
 
-      const bh = photoBand(ctx, o.photo, W, 132, tall ? 520 : 310, { fade: C5.bg, tintA: 0.05, washA: 0.55, focus: 0.45 });
+      const bh = photoBand(ctx, o.photo, W, 132, tall ? 520 : 310, { fade: C5.bg, tintA: 0.05, washA: 0.55, fadeFrom: 0.46, focus: 0.45 });
       const bandBottom = bh ? 132 + bh : 0;
+      d5Kicker(ctx, pad, 168, card.badge || ('핵심 ' + p2(index)));
 
       const titleTop = bh ? bandBottom + 44 : (tall ? 340 : 306);
       const lay = layoutRich(ctx, card.title, { maxW: W - pad * 2, maxLines: 3, sizeMax: tall ? 82 : 62, sizeMin: 40, weight: 800, fam: SERIF, lh: 1.36 });
