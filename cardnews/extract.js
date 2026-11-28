@@ -37,9 +37,10 @@
   var MSG = {
     empty: '주소를 넣어 주세요. 예: https://news.example.com/article/123',
     scheme: 'http:// 또는 https:// 주소만 불러올 수 있어요.',
-    bad: '주소 형식을 확인해 주세요. 예: https://news.example.com/article/123',
+    bad: '주소를 찾지 못했어요. 기사·블로그 주소(https://…)를 넣어 주세요.',
     private: '내 컴퓨터·사내망 주소는 열 수 없어요. 누구나 볼 수 있는 공개 주소를 넣어 주세요.',
     blocked: '이 사이트는 보안을 위해 자동 읽기가 막혀 있어요. 불러오지 못했으니 아래 ‘직접 입력’을 열어 본문을 붙여넣어 주세요.',
+    rate: '지금 불러오기 요청이 잠깐 몰렸어요(1분에 20건까지). 30초쯤 뒤에 다시 눌러 주세요.',
     notfound: '주소가 없거나 삭제된 페이지예요(404). 주소를 다시 확인해 주세요.',
     empty_body: '본문을 찾지 못했어요. 사진·영상만 있는 페이지이거나 자동 읽기를 막아 둔 사이트예요. 아래 ‘직접 입력’을 열어 붙여넣어 주세요.',
     network: '인터넷 연결이나 사이트 응답이 느려 본문을 불러오지 못했어요. 잠시 뒤 다시 눌러 보시고, 계속 안 되면 아래 ‘직접 입력’을 열어 주세요.',
@@ -51,22 +52,101 @@
     return MSG[code] || MSG.network;
   }
 
+  /* 글자 수 세기 (괄호 짝 확인용) */
+  function countChar(s, ch) {
+    var n = 0;
+    for (var i = 0; i < s.length; i += 1) if (s.charAt(i) === ch) n += 1;
+    return n;
+  }
+
+  /** 주소 끝에 붙은 마침표·쉼표·따옴표·괄호를 떼어 낸다. */
+  function trimUrlTail(s) {
+    var prev;
+    do {
+      prev = s;
+      s = s.replace(/[.,;:!?'"“”‘’`»…、。·]+$/, '');
+      var last = s.slice(-1);
+      if (last === ')' && countChar(s, ')') > countChar(s, '(')) s = s.slice(0, -1);
+      else if (last === ']' && countChar(s, ']') > countChar(s, '[')) s = s.slice(0, -1);
+      else if (last === '}' && countChar(s, '}') > countChar(s, '{')) s = s.slice(0, -1);
+      else if (last === '>' || last === '」' || last === '』' || last === '】' || last === '〉') s = s.slice(0, -1);
+    } while (s !== prev);
+    return s;
+  }
+
+  /** 문자열 어디에 있든 http(s) 주소를 먼저 찾아낸다.
+      공유하기로 복사한 문자열은 "[단독] 제목… https://주소" 처럼 제목이 앞에 붙는다. */
+  function findUrlInText(text) {
+    var re = /https?:\/\/[^\s<>"'“”‘’`]+/ig;
+    var m;
+    while ((m = re.exec(text))) {
+      var cand = trimUrlTail(m[0]);
+      if (/^https?:\/\/[^\s\/]/i.test(cand)) return cand;
+    }
+    return '';
+  }
+
+  /* 스킴 없이 들어온 'www.mk.co.kr/…' 같은 덩어리 */
+  var BARE_DOMAIN = /^(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+[a-z]{2,}(?::\d{2,5})?(?:[\/?#][^\s]*)?$/i;
+
+  function findBareDomain(text) {
+    var parts = String(text).split(/[\s<>"'“”‘’`()\[\]{}]+/);
+    for (var i = 0; i < parts.length; i += 1) {
+      var t = trimUrlTail(parts[i].replace(/^[.,;:!?'"“”‘’`]+/, ''));
+      if (!t || /\s/.test(t)) continue;
+      if (BARE_DOMAIN.test(t)) return 'https://' + t;
+    }
+    return '';
+  }
+
+  /** 사이트 구조 때문에 본문이 비어 오는 주소를 본문이 열리는 주소로 바꾼다.
+      · 네이버 블로그 PC 주소(blog.naver.com/{id}/{logNo})는 본문이 iframe 안에 있어
+        추출기가 빈 본문을 받는다 → PostView.naver(본문 직접) 주소로 바꾼다.
+      · 네이버 뉴스 모바일 /mnews/article/ 은 404 → /article/ 로 바꾼다. */
+  function normalizeForReader(u) {
+    var host = u.hostname.toLowerCase();
+    var path = u.pathname || '/';
+    var out = { url: u.href, alternates: [] };
+
+    if (/(^|\.)blog\.naver\.com$/.test(host)) {
+      var m = /^\/([A-Za-z0-9._\-]+)\/(\d{4,})\/?$/.exec(path);
+      var blogId = m ? m[1] : '';
+      var logNo = m ? m[2] : '';
+      if (!blogId || !logNo) {
+        blogId = u.searchParams.get('blogId') || '';
+        logNo = u.searchParams.get('logNo') || '';
+      }
+      if (blogId && /^\d{4,}$/.test(logNo)) {
+        out.url = 'https://blog.naver.com/PostView.naver?blogId=' +
+          encodeURIComponent(blogId) + '&logNo=' + logNo;
+        var mobile = 'https://m.blog.naver.com/' + encodeURIComponent(blogId) + '/' + logNo;
+        if (mobile !== u.href) out.alternates.push(mobile);
+      }
+    }
+
+    if (/^m\.news\.naver\.com$/.test(host) && /^\/mnews\/article\//i.test(path)) {
+      var fixed = path.replace(/^\/mnews\/article\//i, '/article/');
+      out.url = 'https://m.news.naver.com' + fixed + (u.search || '');
+      out.alternates.push('https://n.news.naver.com' + fixed + (u.search || ''));
+    }
+
+    return out;
+  }
+
   /** 사용자가 넣은 문자열을 실제 주소로 다듬고 검사한다. */
   function parseUrl(input) {
-    var s = String(input == null ? '' : input).trim();
-    if (!s) return { ok: false, error: 'empty' };
+    var rawText = String(input == null ? '' : input).replace(/[\u200b-\u200d\ufeff]/g, '').trim();
+    if (!rawText) return { ok: false, error: 'empty' };
 
-    s = s.split(/\s+/)[0];                       // 뒤에 붙은 설명·공백 제거
-    s = s.replace(/^[<"'“”‘’(]+/, '').replace(/[>"'“”‘’)]+$/, '');
-
-    var scheme = /^([a-z][a-z0-9+.\-]*):/i.exec(s);
-    if (scheme && !/^https?$/i.test(scheme[1])) return { ok: false, error: 'scheme' };
-    if (!scheme) {
-      if (/^\/\//.test(s)) s = 'https:' + s;
-      else if (/^[^\s/]+\.[^\s/]+/.test(s)) s = 'https://' + s;   // www.xxx.com/... 형태
-      else return { ok: false, error: 'bad' };
-    } else if (!/^https?:\/\//i.test(s)) {
+    /* 위험한 스킴은 문자열 어디에서 시작하든 먼저 막는다 */
+    if (/^(?:javascript|vbscript|data|file|about|blob|jar|chrome|ms-|view-source)\s*:/i.test(rawText)) {
       return { ok: false, error: 'scheme' };
+    }
+
+    var s = findUrlInText(rawText);
+    if (!s) {
+      s = findBareDomain(rawText);
+      if (!s) return { ok: false, error: 'bad' };
     }
 
     var u;
@@ -82,7 +162,18 @@
     if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) && !/^[\d.]+$/.test(host)) {
       return { ok: false, error: 'bad' };
     }
-    return { ok: true, url: u.href, host: host };
+
+    var norm = normalizeForReader(u);
+    var normalized;
+    try { normalized = new URL(norm.url); } catch (e2) { normalized = u; }
+
+    return {
+      ok: true,
+      url: norm.url,
+      host: normalized.hostname.toLowerCase(),
+      original: u.href,
+      alternates: norm.alternates
+    };
   }
 
   /* ---------------------------------------------------------------------
@@ -364,7 +455,7 @@
       if (timer) clearTimeout(timer);
       if (res.status === 404) throw new Error('notfound');
       if (res.status === 403 || res.status === 401) throw new Error('blocked');
-      if (res.status === 429) throw new Error('blocked');
+      if (res.status === 429) throw new Error('rate');
       if (res.status === 413) throw new Error('too_long');
       if (!res.ok) throw new Error('network');
       return res.text();
@@ -372,29 +463,52 @@
       if (timer) clearTimeout(timer);
       if (!err) throw new Error('network');
       if (err.message === 'notfound' || err.message === 'blocked' ||
-          err.message === 'too_long' || err.message === 'network') throw err;
+          err.message === 'rate' || err.message === 'too_long' ||
+          err.message === 'network') throw err;
       if (err.name === 'AbortError') throw new Error('timeout');
       throw new Error('network');
     });
   }
 
-  /** 주소 → 파싱 결과 (실패하면 { ok:false, error }) */
+  /** 주소 → 파싱 결과 (실패하면 { ok:false, error })
+      본문이 비어 오는 사이트는 준비된 대체 주소(alternates)를 차례로 한 번 더 시도한다. */
   function readUrl(url) {
     var check = parseUrl(url);
     if (!check.ok) return Promise.resolve({ ok: false, error: check.error });
-    return fetchText(check.url).then(function (raw) {
-      if (/Target URL returned error 404/i.test(raw)) return { ok: false, error: 'notfound' };
-      if (/Target URL returned error (401|403|429)/i.test(raw)) return { ok: false, error: 'blocked' };
-      var parsed = parseReader(raw);
-      parsed.host = check.host;
-      parsed.url = check.url;
-      if (!parsed.paragraphs.length) return { ok: false, error: 'empty_body', host: check.host };
-      if (parsed.chars < 120) return { ok: false, error: 'empty_body', host: check.host };
-      parsed.ok = true;
-      return parsed;
-    }).catch(function (err) {
-      return { ok: false, error: (err && err.message) || 'network' };
-    });
+
+    var list = [check.url];
+    var alts = check.alternates || [];
+    for (var i = 0; i < alts.length; i += 1) {
+      if (list.indexOf(alts[i]) < 0) list.push(alts[i]);
+    }
+
+    var failure = { ok: false, error: 'network' };
+
+    function tryOne(idx) {
+      if (idx >= list.length) return Promise.resolve(failure);
+      return fetchText(list[idx]).then(function (raw) {
+        if (/Target URL returned error 404/i.test(raw)) return { ok: false, error: 'notfound' };
+        if (/Target URL returned error (401|403|429)/i.test(raw)) return { ok: false, error: 'blocked' };
+        var parsed = parseReader(raw);
+        parsed.host = check.host;
+        parsed.url = list[idx];
+        if (!parsed.paragraphs.length || parsed.chars < 120) {
+          return { ok: false, error: 'empty_body', host: check.host };
+        }
+        parsed.ok = true;
+        if (idx > 0) parsed.via = list[idx];
+        return parsed;
+      }).catch(function (err) {
+        return { ok: false, error: (err && err.message) || 'network' };
+      }).then(function (res) {
+        if (res && res.ok) return res;
+        failure = res || { ok: false, error: 'network' };
+        if (failure.error === 'rate') return failure;      // 우리 쪽 요청 한도 — 다시 시도해도 같다
+        return tryOne(idx + 1);
+      });
+    }
+
+    return tryOne(0);
   }
 
   global.CardNewsExtract = {
