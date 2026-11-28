@@ -590,7 +590,26 @@
       if (!best || score < best.score) best = { s, score };
     });
     const pick = best ? best.s : list[list.length - 1];
-    return pick ? summaryLine(pick.t, 34) : '';
+    return pick ? titlePhrase(pick.t, 30) : '';
+  }
+
+  /** 제목용 어구 — 말줄임표 없이 어절 경계에서 자르고 꼬리 조사를 덜어 낸다 */
+  function titlePhrase(t, max) {
+    let s = String(t || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/^[\s"'“”‘’\[\(]+/, '')
+      .replace(/[.!?…]+$/, '');
+    const ell = s.search(/…|\.\.\./);
+    if (ell > 8 && ell <= max + 10) s = s.slice(0, ell);
+    s = s.replace(/[,\s·"'“”‘’]+$/, '');
+    if (s.length > max) {
+      const cut = s.slice(0, max);
+      const sp = Math.max(cut.lastIndexOf(' '), cut.lastIndexOf('·'));
+      s = (sp > max * 0.5 ? cut.slice(0, sp) : cut).replace(/[\s,·]+$/, '');
+    }
+    s = s.replace(/(?:은|는|이|가|을|를|의|에|도|과|와|로|으로|며|고|지만|는데|서|다)$/, '');
+    return s.trim();
   }
 
   function buildSummaryCards(norm) {
