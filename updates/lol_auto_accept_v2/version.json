@@ -1,8 +1,8 @@
 {
-  "version": "2.1.0",
+  "version": "2.2.0",
   "url": "https://coo714.github.io/pickle-games/updates/lol_auto_accept_v2/app.py",
   "app_url": "https://coo714.github.io/pickle-games/updates/lol_auto_accept_v2/app.py",
-  "sha256": "60cc1ea5adb39f1399895cd09bc1209e3771680c4ed7023bfc2feaad93fe7ba6",
+  "sha256": "4eb5e480def254d32a76bf623634149713dbb234932e3166f195bd9e310fff87",
   "released": "2026-11-28",
-  "notes": "· 화면 아래에 버전(v2.1.0)과 [업데이트 확인] 버튼 추가\n· 새 버전이 있으면 위쪽 파란 배너로 알림 (누를 때만 교체)\n· SHA-256 + 문법 검사를 통과할 때만 백업 후 교체·재시작"
+  "notes": "· 수락 지연을 [즉시] [1초] [2초] [3초] [4초] [5초] 중에서 고를 수 있습니다 (기본 1초)\n· 고른 값은 다음에 실행해도 그대로 기억합니다 (기존 1.0초/즉시 설정도 유지)"
 }

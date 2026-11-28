@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-롤 · 롤토체스 자동 수락 v2.1  (무콘솔 GUI)
+롤 · 롤토체스 자동 수락 v2.2  (무콘솔 GUI)
 ==========================================
 
 * 이 파일은 `app.pyw` 입니다. .pyw 로 저장되어 있어 더블클릭해도
   검은 CMD 창이 뜨지 않고 이 창만 뜹니다.
 * 동작 원리는 engine.py 참고: 롤 클라이언트의 로컬 API(LCU)만 사용합니다.
   로그인 정보·토큰·화면 캡처를 쓰지 않고, 매칭 [수락] 버튼만 대신 눌러 줍니다.
+
+v2.2 에서 달라진 점 — 몇 초 후 수락
+-----------------------------------
+* 수락 지연을 [즉시] [1초] [2초] [3초] [4초] [5초] 여섯 버튼에서 고릅니다.
+  기본값은 1초이고, 고른 값은 settings.json(accept_delay)에 저장되어
+  다음에 실행해도 그대로 유지됩니다. 기존 설정 파일(0.0 / 1.0)도 그대로 읽힙니다.
 
 v2.1 에서 달라진 점 — 원클릭 자동 업데이트
 ------------------------------------------
@@ -49,8 +55,42 @@ if _HERE not in sys.path:
 
 from engine import AutoAcceptEngine, ACCEPT_DELAY, LEVEL_DONE, LEVEL_FOUND, LEVEL_IDLE, LEVEL_OK, LEVEL_WARN
 
+# v2.2 지연 선택 도우미.
+# 패키지에 들어 있는 engine.py(v2.2)에는 이 함수들이 있지만, v2.1 사용자가
+# 앱의 [업데이트] 로 app.pyw 만 새로 받으면 옛 engine.py 가 남아 있습니다.
+# 그때도 앱이 그대로 떠야 하므로 여기서도 똑같은 기능을 정의해 둡니다.
+try:
+    from engine import DELAY_OPTIONS, normalize_delay, delay_text
+except ImportError:
+    DELAY_MIN = 0.0
+    DELAY_MAX = 5.0
+    DELAY_OPTIONS = (0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
+
+    def normalize_delay(value, default=ACCEPT_DELAY):
+        """0.0~5.0초(소수점 1자리)로 안전하게 보정한다."""
+        try:
+            seconds = float(value)
+        except (TypeError, ValueError):
+            return float(default)
+        if seconds != seconds or seconds in (float("inf"), float("-inf")):
+            return float(default)
+        if seconds <= DELAY_MIN:
+            return DELAY_MIN
+        if seconds >= DELAY_MAX:
+            return DELAY_MAX
+        return round(seconds, 1)
+
+    def delay_text(seconds):
+        """'3.0' → '3초', '1.5' → '1.5초', '0' → '즉시'"""
+        seconds = normalize_delay(seconds)
+        if seconds <= 0:
+            return "즉시"
+        if abs(seconds - round(seconds)) < 1e-9:
+            return "{}초".format(int(round(seconds)))
+        return "{:.1f}초".format(seconds)
+
 APP_TITLE = "롤 · 롤토체스 자동 수락"
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.2.0"
 
 # --- 자동 업데이트 (GitHub Pages 고정 주소) ---------------------------------
 UPDATE_SITE_LABEL = "coo714.github.io"
@@ -103,6 +143,38 @@ PAD = 20
 CONTENT_W = WIDTH - PAD * 2
 
 SETTINGS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
+
+
+def load_delay(path=None):
+    """settings.json 에서 지연 값을 읽는다. 옛 파일(delay_seconds)도 인정.
+
+    파일이 없거나·깨졌거나·숫자가 아니면 기본값(1초)을 쓴다.
+    범위를 벗어난 값(-1, 99 등)은 0.0~5.0초 안으로 보정한다.
+    """
+    path = SETTINGS_PATH if path is None else path
+    try:
+        with open(path, "r", encoding="utf-8") as fp:
+            data = json.load(fp)
+    except (OSError, ValueError, TypeError):
+        return ACCEPT_DELAY
+    if not isinstance(data, dict):
+        return ACCEPT_DELAY
+    for key in ("accept_delay", "delay_seconds"):
+        if key in data:
+            return normalize_delay(data.get(key))
+    return ACCEPT_DELAY
+
+
+def save_delay(delay, path=None):
+    """accept_delay 와 delay_seconds 를 함께 써서 옛/새 버전 모두 읽게 한다."""
+    path = SETTINGS_PATH if path is None else path
+    delay = normalize_delay(delay)
+    try:
+        with open(path, "w", encoding="utf-8") as fp:
+            json.dump({"accept_delay": delay, "delay_seconds": delay}, fp)
+    except OSError:
+        pass
+    return delay
 
 
 # ---------------------------------------------------------------------------
@@ -575,49 +647,93 @@ class ToggleSwitch(tk.Canvas):
 
 
 # ---------------------------------------------------------------------------
-# 지연 선택 (두 칸짜리 세그먼트 버튼)
+# 수락 지연 선택 (즉시 · 1~5초 버튼 한 줄)
 # ---------------------------------------------------------------------------
-class SegmentedDelay(tk.Canvas):
+class DelayPicker(tk.Canvas):
+    """[즉시] [1초] [2초] [3초] [4초] [5초] 중 하나를 고르는 한 줄 선택기."""
+
     HEIGHT = 46
+    GAP = 5
+    LABELS = ("즉시", "1초", "2초", "3초", "4초", "5초")
 
     def __init__(self, master, family, command=None, delay=ACCEPT_DELAY):
         super().__init__(master, width=CONTENT_W, height=self.HEIGHT,
                          bg=BG, highlightthickness=0, bd=0, cursor="hand2")
         self.family = family
         self.command = command
-        self.delay = 0.0 if delay <= 0 else ACCEPT_DELAY
-        self.options = [(ACCEPT_DELAY, "1.0초 지연"), (0.0, "즉시 수락")]
+        self.options = tuple(float(value) for value in DELAY_OPTIONS)
+        self.delay = normalize_delay(delay)
+        self._hover = None
         self.bind("<Button-1>", self._clicked)
+        self.bind("<Motion>", self._moved)
+        self.bind("<Leave>", self._left)
         self.draw()
 
+    # -- 좌표 -------------------------------------------------------------
+    def cell_width(self):
+        count = max(1, len(self.options))
+        return (CONTENT_W - self.GAP * (count - 1)) / float(count)
+
+    def index_at(self, x):
+        """누른 x 좌표 → 버튼 번호 (0=즉시 … 5=5초). 범위를 벗어나면 양 끝."""
+        step = self.cell_width() + self.GAP
+        index = int(max(0.0, float(x)) // step)
+        return max(0, min(index, len(self.options) - 1))
+
+    def selected_index(self):
+        """지금 지연과 똑같은 버튼 번호. 목록에 없는 값이면 None."""
+        for index, value in enumerate(self.options):
+            if abs(value - self.delay) < 1e-9:
+                return index
+        return None
+
+    # -- 상태 -------------------------------------------------------------
     def set_delay(self, delay):
-        self.delay = 0.0 if delay <= 0 else ACCEPT_DELAY
+        delay = normalize_delay(delay)
+        if abs(delay - self.delay) < 1e-9:
+            return
+        self.delay = delay
         self.draw()
 
     def _clicked(self, event):
-        half = CONTENT_W / 2
-        index = 0 if event.x < half else 1
-        value = self.options[index][0]
-        if value != self.delay:
-            self.delay = value
-            self.draw()
-            if self.command:
-                self.command(value)
+        value = self.options[self.index_at(event.x)]
+        if abs(value - self.delay) < 1e-9:
+            return
+        self.delay = value
+        self.draw()
+        if self.command:
+            self.command(value)
 
+    def _moved(self, event):
+        index = self.index_at(event.x)
+        if index != self._hover:
+            self._hover = index
+            self.draw()
+
+    def _left(self, _event=None):
+        if self._hover is not None:
+            self._hover = None
+            self.draw()
+
+    # -- 그리기 -----------------------------------------------------------
     def draw(self):
         self.delete("all")
-        half = CONTENT_W / 2
-        for index, (value, label) in enumerate(self.options):
-            x1 = index * half + 1
-            x2 = x1 + half - 2
-            selected = (value == self.delay)
-            rounded_rect(self, x1, 1, x2, self.HEIGHT - 1, 12,
-                         fill=GOLD_DEEP if selected else CARD_SOFT,
+        width = self.cell_width()
+        step = width + self.GAP
+        chosen = self.selected_index()
+        for index, value in enumerate(self.options):
+            x1 = index * step
+            x2 = x1 + width
+            selected = (index == chosen)
+            hovered = (index == self._hover) and not selected
+            rounded_rect(self, x1 + 1, 1, x2 - 1, self.HEIGHT - 1, 12,
+                         fill=GOLD_DEEP if selected else ("#16233C" if hovered else CARD_SOFT),
                          outline=GOLD if selected else BORDER,
                          width=2 if selected else 1)
+            label = self.LABELS[index] if index < len(self.LABELS) else delay_text(value)
             self.create_text((x1 + x2) / 2, self.HEIGHT / 2, text=label,
-                             fill=GOLD if selected else MUTED,
-                             font=(self.family, 11, "bold" if selected else "normal"))
+                             fill=GOLD if selected else (TEXT if hovered else MUTED),
+                             font=(self.family, 10, "bold" if selected else "normal"))
 
 
 # ---------------------------------------------------------------------------
@@ -728,11 +844,14 @@ class AutoAcceptApp(tk.Tk):
         self._chip_text = self.chip.create_text(55, 12, text="모드 대기", fill=MUTED,
                                                 font=(self.family, 9))
 
-        # 수락 지연
-        self._label(body, "수락 지연", 9, MUTED).place(x=PAD, y=116)
-        self.segment = SegmentedDelay(body, self.family, command=self._change_delay,
-                                      delay=self.engine.accept_delay)
-        self.segment.place(x=PAD, y=134)
+        # 수락 지연 (몇 초 후 수락)
+        self._label(body, "수락 지연 (몇 초 후 수락)", 9, MUTED).place(x=PAD, y=116)
+        self.delay_value = self._label(body, "", 9, GOLD, bold=True, anchor="e")
+        self.delay_value.place(x=WIDTH - PAD - 130, y=116, width=130)
+        self.picker = DelayPicker(body, self.family, command=self._change_delay,
+                                  delay=self.engine.accept_delay)
+        self.picker.place(x=PAD, y=134)
+        self._update_delay_hint(self.picker.delay)
 
         # 자동 수락 스위치
         self._label(body, "자동 수락", 10, TEXT, bold=True).place(x=PAD, y=196)
@@ -872,27 +991,28 @@ class AutoAcceptApp(tk.Tk):
         self.engine.submit("enabled", on)
 
     def _change_delay(self, delay):
+        delay = normalize_delay(delay)
         self.engine.submit("delay", delay)
-        self.switch_hint.configure(text="켜짐" if self.switch.on else "꺼짐",
-                                   fg=GREEN if self.switch.on else MUTED)
+        self._update_delay_hint(delay)
         self._save_delay(delay)
+
+    def _update_delay_hint(self, delay):
+        """선택한 지연을 오른쪽에 '3초 후 수락' 처럼 보여 준다."""
+        try:
+            if normalize_delay(delay) <= 0:
+                text = "즉시 수락"
+            else:
+                text = "{} 후 수락".format(delay_text(delay))
+            self.delay_value.configure(text=text, fg=GOLD)
+        except Exception:
+            pass
 
     # -- 설정 저장 ---------------------------------------------------------
     def _load_delay(self):
-        try:
-            with open(SETTINGS_PATH, "r", encoding="utf-8") as fp:
-                data = json.load(fp)
-            delay = float(data.get("accept_delay", ACCEPT_DELAY))
-            return 0.0 if delay <= 0 else ACCEPT_DELAY
-        except (OSError, ValueError, TypeError):
-            return ACCEPT_DELAY
+        return load_delay()
 
     def _save_delay(self, delay):
-        try:
-            with open(SETTINGS_PATH, "w", encoding="utf-8") as fp:
-                json.dump({"accept_delay": delay}, fp)
-        except OSError:
-            pass
+        save_delay(delay)
 
     # -- 새 버전 배너 ------------------------------------------------------
     def _build_update_banner(self):
