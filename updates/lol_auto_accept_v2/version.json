@@ -1,8 +1,8 @@
 {
   "version": "2.2.0",
-  "url": "https://coo714.github.io/pickle-games/updates/lol_auto_accept_v2/app.py",
-  "app_url": "https://coo714.github.io/pickle-games/updates/lol_auto_accept_v2/app.py",
-  "sha256": "4eb5e480def254d32a76bf623634149713dbb234932e3166f195bd9e310fff87",
+  "url": "https://tools-kr.github.io/updates/lol_auto_accept_v2/app.py",
+  "app_url": "https://tools-kr.github.io/updates/lol_auto_accept_v2/app.py",
+  "sha256": "57bd965dcb6e0f6843f66ffe10a917ef73a2b284bcceacd869f00cafdfdcc119",
   "released": "2026-11-28",
-  "notes": "· 수락 지연을 [즉시] [1초] [2초] [3초] [4초] [5초] 중에서 고를 수 있습니다 (기본 1초)\n· 고른 값은 다음에 실행해도 그대로 기억합니다 (기존 1.0초/즉시 설정도 유지)"
+  "notes": "· 업데이트 주소를 https://tools-kr.github.io 로 옮겼습니다 (기존 coo714 주소 종료)\n· 수락 지연 [즉시] [1초] [2초] [3초] [4초] [5초] (기본 1초)"
 }

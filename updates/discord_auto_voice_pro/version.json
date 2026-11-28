@@ -1,7 +1,7 @@
 {
-  "version": "1.2.1",
-  "app_url": "https://coo714.github.io/pickle-games/updates/discord_auto_voice_pro/app.py",
-  "sha256": "273c5e571ce5badc76cd4fad6d7bbe1e2a027b11e42c0985f47216a6b83602ab",
+  "version": "1.2.2",
+  "app_url": "https://tools-kr.github.io/updates/discord_auto_voice_pro/app.py",
+  "sha256": "e420ef4ea27001f4e60088b5bdefa991dab2effad1895c7e0a958b4f5aa547b4",
   "released": "2026-11-28",
-  "notes": "개인정보(특정인 이름) 제거 및 범용 PRO 에디션 적용"
+  "notes": "· 업데이트 주소를 https://tools-kr.github.io 로 옮겼습니다 (기존 coo714 주소 종료)\n· 업데이트 확인·다운로드가 새 주소에서 정상 동작합니다"
 }

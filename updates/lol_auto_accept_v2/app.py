@@ -24,7 +24,7 @@ v2.1 에서 달라진 점 — 원클릭 자동 업데이트
 * 받은 파일은 SHA-256 해시가 version.json 과 같고, ast.parse 문법 검사와
   APP_VERSION 확인까지 통과할 때만 app.pyw.bak 으로 백업한 뒤 교체합니다.
   어느 하나라도 어긋나면 원본을 그대로 두고 취소합니다.
-* 통신은 오직 https://coo714.github.io/pickle-games/updates/lol_auto_accept_v2/
+* 통신은 오직 https://tools-kr.github.io/updates/lol_auto_accept_v2/
   의 version.json 과 app.py 두 곳뿐입니다. 설정(settings.json)은 건드리지 않습니다.
 """
 
@@ -93,8 +93,8 @@ APP_TITLE = "롤 · 롤토체스 자동 수락"
 APP_VERSION = "2.2.0"
 
 # --- 자동 업데이트 (GitHub Pages 고정 주소) ---------------------------------
-UPDATE_SITE_LABEL = "coo714.github.io"
-UPDATE_PATH_PREFIX = "/pickle-games/updates/lol_auto_accept_v2/"
+UPDATE_SITE_LABEL = "tools-kr.github.io"
+UPDATE_PATH_PREFIX = "/updates/lol_auto_accept_v2/"
 UPDATE_BASE_URL = "https://" + UPDATE_SITE_LABEL + UPDATE_PATH_PREFIX.rstrip("/")
 UPDATE_VERSION_URL = UPDATE_BASE_URL + "/version.json"
 UPDATE_APP_URL = UPDATE_BASE_URL + "/app.py"
@@ -226,7 +226,7 @@ def version_text(version):
 
 
 def is_official_update_url(url):
-    """공식 주소(https + coo714.github.io + 정해진 경로)인지 확인합니다."""
+    """공식 주소(https + tools-kr.github.io + 정해진 경로)인지 확인합니다."""
     try:
         parts = urlsplit(str(url or "").strip())
     except ValueError:

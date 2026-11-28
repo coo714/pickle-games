@@ -37,14 +37,14 @@ from urllib.request import Request, urlopen
 
 APP_TITLE = "디스코드 음성방 자동 입장 PRO"
 APP_SUBTITLE = "Discord Auto Voice Pro"
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.2.2"
 APP_DIR_NAME = "DiscordAutoVoice"
 CONFIG_FILENAME = "config.json"
 STARTUP_FILENAME = "DiscordAutoVoice.vbs"
 
 # --- 자동 업데이트 (GitHub Pages 고정 주소) ---------------------------------
-UPDATE_SITE_LABEL = "coo714.github.io"
-UPDATE_BASE_URL = "https://coo714.github.io/pickle-games/updates/discord_auto_voice_pro"
+UPDATE_SITE_LABEL = "tools-kr.github.io"
+UPDATE_BASE_URL = "https://tools-kr.github.io/updates/discord_auto_voice_pro"
 UPDATE_VERSION_URL = UPDATE_BASE_URL + "/version.json"
 UPDATE_APP_URL = UPDATE_BASE_URL + "/app.py"
 UPDATE_TIMEOUT = 6.0
