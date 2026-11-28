@@ -1348,7 +1348,7 @@
     const textX = pad + chip + 26;
 
     const laid = rows.map(t => layoutRich(ctx, t, {
-      maxW: W - textX - pad, maxLines: 2, sizeMax: rowSize, sizeMin: 21,
+      maxW: W - textX - pad, maxLines: 3, sizeMax: rowSize, sizeMin: 21,
       weight: P.weight, fam: P.fam, lh: lhRate
     }));
     const rowH = laid.map(l => Math.max(l.lines.length * lh, chip));

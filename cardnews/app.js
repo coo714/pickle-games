@@ -561,14 +561,36 @@
       .replace(/^(?:그러나|하지만|다만|또한|한편|이에|결국|특히|그런데|그리고|또|이는|이처럼|아울러)\s+/, '')
       .replace(/\s+/g, ' ')
       .trim()
+      .replace(/^[\s"'“”‘’\[\(]+/, '')
       .replace(/[.!?…]+$/, '')
       .replace(/[,·\s]+$/, '');
+
+    /* 문장 안의 말줄임(…)은 원문이 이미 줄인 자리 — 그 앞까지만 쓴다 */
+    const ell = s.search(/…|\.\.\./);
+    if (ell > 8 && ell <= 46) s = s.slice(0, ell).replace(/[\s,·"'“”‘’]+$/, '');
+
     if (s.length > max) {
       const cut = s.slice(0, max);
       const sp = Math.max(cut.lastIndexOf(' '), cut.lastIndexOf(','), cut.lastIndexOf('·'));
-      s = (sp > max * 0.55 ? cut.slice(0, sp) : cut).replace(/[\s,·]+$/, '') + '…';
+      s = (sp > max * 0.55 ? cut.slice(0, sp) : cut).replace(/[\s,·"'“”‘’]+$/, '') + '…';
     }
     return s;
+  }
+
+  /** 결론 카드 제목 — 마지막 문단에서 카드 제목으로 쓰기 좋은(짧은) 문장을 고른다 */
+  function conclusionLine(sents) {
+    const last = sents.length ? sents[sents.length - 1].p : -1;
+    const pool = sents.filter(s => s.p === last);
+    const list = pool.length ? pool : sents;
+    let best = null;
+    list.forEach(s => {
+      const n = s.t.length;
+      if (n < 18 || n > 90) return;
+      const score = Math.abs(34 - n) - (s === list[list.length - 1] ? 6 : 0);
+      if (!best || score < best.score) best = { s, score };
+    });
+    const pick = best ? best.s : list[list.length - 1];
+    return pick ? summaryLine(pick.t, 34) : '';
   }
 
   function buildSummaryCards(norm) {
@@ -626,7 +648,7 @@
       });
     }
     picked.sort((a, b) => a.i - b.i);
-    const lines = picked.map(x => summaryLine(x.s.t, 46)).filter(Boolean);
+    const lines = picked.map(x => summaryLine(x.s.t, 42)).filter(Boolean);
 
     /* 표지 — 첫 문장을 리드로, 가장 센 숫자를 크게 */
     const allNums = [];
@@ -636,13 +658,11 @@
     let coverLabel = coverNum ? cleanLabel(clauseOf(coverNum.s.t, coverNum.n.index)) : '';
     if (coverNum) coverLabel = stripNumFromLabel(coverLabel, coverNum.n.v);
 
-    /* 결론 — 마지막 문단의 핵심 문장 */
-    let concl = '';
-    const lastP = sents.length ? sents[sents.length - 1] : null;
-    if (lastP) concl = summaryLine(lastP.t, 38);
-    if (concl.length < 8) {
+    /* 결론 — 마지막 문단의 짧은 문장 */
+    let concl = conclusionLine(sents);
+    if (!concl || concl.length < 8) {
       const restPick = byScore.find(x => !picked.some(p => p.i === x.i));
-      concl = restPick ? summaryLine(restPick.s.t, 38) : summaryLine(title, 38);
+      concl = restPick ? summaryLine(restPick.s.t, 34) : summaryLine(title, 34);
     }
 
     return [
