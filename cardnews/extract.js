@@ -268,7 +268,10 @@
       var tail = parts.slice(1).join(' ').trim();
       if (head.length >= 8 && tail.length <= 24 && !/[.!?]$/.test(tail)) t = head;
     }
-    t = t.replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').replace(/\s+/g, ' ').trim();
+    /* 양끝이 짝으로 감싸인 따옴표만 뗀다 — ‘10kg 에어컨’처럼 제목 안의 인용부호는 살린다 */
+    var quoted = /^(["'“”‘’]+)([\s\S]*)(["'“”‘’]+)$/.exec(t);
+    if (quoted && !/["'“”‘’]/.test(quoted[2])) t = quoted[2].trim();
+    t = t.replace(/\s+/g, ' ').trim();
     return t;
   }
 
