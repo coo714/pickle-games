@@ -1453,6 +1453,8 @@ class ProApp:
     def _on_canvas_configure(self, event):
         try:
             self._body_canvas.itemconfigure(self._body_window, width=event.width)
+            # 창 높이나 배너 때문에 보이는 영역이 줄면 스크롤 막대를 다시 계산합니다.
+            self._show_scrollbar_if_needed()
         except Exception:
             pass
 
@@ -1771,6 +1773,11 @@ class ProApp:
             version_text(manifest["version"])))
         if not self._banner.winfo_ismapped():
             self._banner.pack(fill="x", after=self._header)
+            try:
+                self.root.update_idletasks()
+            except Exception:
+                pass
+            self._show_scrollbar_if_needed()
 
     def hide_banner(self):
         try:
