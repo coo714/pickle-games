@@ -282,6 +282,8 @@
     var cut = t.slice(0, max);
     var sp = cut.lastIndexOf(' ');
     if (sp > max * 0.6) cut = cut.slice(0, sp);
+    /* 잘린 끝에 걸린 영어 연결어(in·of·the…)는 함께 떼어 낸다 */
+    cut = cut.replace(/\s+(?:in|on|of|to|and|the|a|an|for|with|at|by|from|as|its|their|his|her|is|are|was|were|that|but|or)$/i, '');
     return cut.replace(/[\s,·]+$/, '');
   }
 
@@ -437,6 +439,102 @@
   }
 
   /* ---------------------------------------------------------------------
+     3-1) MSN 뉴스 (msn.com)
+     ---------------------------------------------------------------------
+     msn.com 기사 페이지는 글자를 Shadow DOM 안에 그려서, 페이지 주소를 그대로
+     Jina Reader 로 읽히면 본문이 비어 온다. 대신 MSN 이 쓰는 기사 JSON
+       https://assets.msn.com/content/view/v2/Detail/{locale}/{기사ID}
+     은 CORS 가 열려 있어 본문(HTML)과 제목, 원문 주소(sourceHref)를 그대로 받는다.
+     --------------------------------------------------------------------- */
+
+  var MSN_HOST = /(^|\.)msn\.com$/i;
+
+  /** msn.com 기사 주소 → { locale, id, api } (기사 주소가 아니면 null) */
+  function msnTarget(url) {
+    var u;
+    try { u = new URL(String(url)); } catch (e) { return null; }
+    if (!MSN_HOST.test(u.hostname.toLowerCase())) return null;
+
+    var path = (u.pathname || '/');
+    /* 기사 ID 는 주소 끝의 /ar-XXXXXXXX 꼴 (영상은 /vi-). 슬러그에 섞인
+       'ar-' 를 피하려고 경로 전체에서 마지막 일치를 쓴다. */
+    var re = /(?:^|\/)(?:ar|vi)-([A-Za-z0-9]{4,})(?=$|\/)/g;
+    var m, id = '';
+    while ((m = re.exec(path))) id = m[1];
+    if (!id) return null;
+
+    /* 언어·지역 코드는 주소 첫 칸(/ko-kr/…). 없으면 한국어(ko-kr)로 본다. */
+    var loc = /^\/([a-z]{2}-[a-z]{2,4})(?:\/|$)/i.exec(path);
+    var locale = loc ? loc[1].toLowerCase() : 'ko-kr';
+
+    return {
+      locale: locale,
+      id: id,
+      api: 'https://assets.msn.com/content/view/v2/Detail/' + locale + '/' + encodeURIComponent(id)
+    };
+  }
+
+  /** 기사 본문 HTML → 줄 단위 평문 (문단·목록 경계에서 줄을 나눈다) */
+  function htmlToText(html) {
+    var s = String(html == null ? '' : html);
+    s = s.replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, ' ');
+    s = s.replace(/<\s*br\s*\/?\s*>/gi, '\n');
+    s = s.replace(/<\s*(?:img|figure|iframe|video|audio|source|svg|noscript|button|input|hr)\b[^>]*>/gi, ' ');
+    s = s.replace(/<\s*\/\s*(?:p|div|li|ul|ol|h[1-6]|blockquote|figcaption|tr|td|section|article|table)\s*>/gi, '\n');
+    s = s.replace(/<\s*(?!\/)[^>]*>/g, ' ');          // 남은 여는 태그
+    s = s.replace(/<[^>]*>/g, ' ');                    // 남은 닫는 태그
+    return decodeEntities(s);
+  }
+
+  /** MSN 기사 JSON(Reader 응답에 실려 온 것) → { title, paragraphs, text, source } */
+  function parseMsnJson(raw) {
+    var text = String(raw == null ? '' : raw);
+    var mark = text.search(/^Markdown Content:\s*$/m);
+    var from = mark >= 0 ? text.indexOf('{', mark) : text.indexOf('{');
+    if (from < 0) return null;
+
+    var data;
+    try { data = JSON.parse(text.slice(from)); } catch (e) { return null; }
+    if (!data || typeof data !== 'object') return null;
+
+    var body = data.body;
+    if (Array.isArray(body)) body = body.join('');
+    var lines = toLines(htmlToText(body));
+    var picked = pickBody(lines);
+    var paras = picked.paragraphs;
+
+    var kept = [], used = 0;
+    for (var pi = 0; pi < paras.length && kept.length < MAX_PARAS; pi += 1) {
+      if (used && used + paras[pi].length > MAX_CHARS) break;
+      kept.push(paras[pi]);
+      used += paras[pi].length;
+    }
+    if (kept.length) paras = kept;
+
+    var title = cleanTitle(String(data.title == null ? '' : data.title).replace(/<[^>]*>/g, ' '));
+    if (!title && data.abstract) {
+      title = cleanTitle(String(data.abstract).replace(/<[^>]*>/g, ' '));
+    }
+    if (!title && paras.length) title = paras[0].replace(/[.!?…]$/, '').slice(0, 60);
+    title = clipTitle(title, 70);
+
+    if (title && paras.length && paras[0] === title) paras = paras.slice(1);
+
+    var source = data.sourceHref && /^https?:\/\//i.test(data.sourceHref) ? data.sourceHref : '';
+    var joined = (title ? title + '\n\n' : '') + paras.join('\n\n');
+
+    return {
+      ok: paras.length > 0,
+      title: title,
+      paragraphs: paras,
+      text: joined.trim(),
+      chars: paras.reduce(function (a, p) { return a + p.length; }, 0),
+      warning: '',
+      source: source
+    };
+  }
+
+  /* ---------------------------------------------------------------------
      4) 실제 불러오기
      --------------------------------------------------------------------- */
   function fetchText(url, opts) {
@@ -473,11 +571,53 @@
     });
   }
 
+  /** MSN 기사 한 건 읽기 — 기사 JSON 이 비면 원문(sourceHref)으로 한 번 더 시도한다. */
+  function readMsn(msn, check) {
+    function fail(error, sourceHref) {
+      if (error === 'rate' || error === 'timeout') {
+        return Promise.resolve({ ok: false, error: error, host: check.host });
+      }
+      if (!sourceHref) return Promise.resolve({ ok: false, error: error || 'empty_body', host: check.host });
+      return fetchText(sourceHref).then(function (raw) {
+        if (/Target URL returned error 404/i.test(raw)) return { ok: false, error: 'notfound', host: check.host };
+        if (/Target URL returned error (401|403|429)/i.test(raw)) return { ok: false, error: 'blocked', host: check.host };
+        var parsed = parseReader(raw);
+        if (!parsed.paragraphs.length || parsed.chars < 120) {
+          return { ok: false, error: 'empty_body', host: check.host };
+        }
+        parsed.ok = true;
+        parsed.host = check.host;
+        parsed.url = sourceHref;
+        parsed.via = sourceHref;
+        return parsed;
+      }).catch(function (err) {
+        return { ok: false, error: (err && err.message) || 'network', host: check.host };
+      });
+    }
+
+    return fetchText(msn.api).then(function (raw) {
+      if (/Target URL returned error 404/i.test(raw)) return fail('notfound', '');
+      if (/Target URL returned error (401|403|429)/i.test(raw)) return fail('blocked', '');
+      var parsed = parseMsnJson(raw);
+      if (!parsed) return fail('empty_body', '');
+      parsed.host = check.host;
+      parsed.url = msn.api;
+      if (!parsed.paragraphs.length || parsed.chars < 120) return fail('empty_body', parsed.source);
+      parsed.ok = true;
+      return parsed;
+    }).catch(function (err) {
+      return fail((err && err.message) || 'network', '');
+    });
+  }
+
   /** 주소 → 파싱 결과 (실패하면 { ok:false, error })
       본문이 비어 오는 사이트는 준비된 대체 주소(alternates)를 차례로 한 번 더 시도한다. */
   function readUrl(url) {
     var check = parseUrl(url);
     if (!check.ok) return Promise.resolve({ ok: false, error: check.error });
+
+    var msn = msnTarget(check.original || check.url);
+    if (msn) return readMsn(msn, check);
 
     var list = [check.url];
     var alts = check.alternates || [];
@@ -523,6 +663,9 @@
     isProse: isProse,
     toLines: toLines,
     pickBody: pickBody,
+    msnTarget: msnTarget,
+    parseMsnJson: parseMsnJson,
+    htmlToText: htmlToText,
     READER_BASE: READER_BASE
   };
 })(window);
