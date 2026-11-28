@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>카드뉴스 메이커 — 기사 한 편이 7장 카드로</title>
+<meta name="description" content="기사·블로그 글을 붙여넣으면 인스타 카드뉴스 5~7장이 자동으로 완성됩니다. 테마 5종, 4:5 / 9:16, 고해상도 PNG·ZIP 저장 무료 웹툴.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%236D5EF8'/%3E%3Crect x='26' y='22' width='48' height='56' rx='8' fill='%23fff'/%3E%3Crect x='34' y='34' width='32' height='6' rx='3' fill='%236D5EF8'/%3E%3Crect x='34' y='46' width='24' height='6' rx='3' fill='%23FF4D8D'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">🃏</div>
+    <div class="brand-txt">
+      <h1>카드뉴스 메이커</h1>
+      <p>기사 한 편 → 인스타 카드뉴스 7장, 3분</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <span id="saveState" class="save-state">자동 저장</span>
+    <button id="zipBtn" class="btn-primary">
+      <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v10m0 0l-3.5-3.5M10 12l3.5-3.5M3 15v2h14v-2"/></svg>
+      전체 장 PNG 저장 (ZIP)
+    </button>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- ================= 왼쪽 패널 ================= -->
+  <aside class="panel">
+
+    <section class="block">
+      <div class="block-head"><h2><span class="step">1</span> 원문 붙여넣기</h2></div>
+      <textarea id="sourceText" class="source" spellcheck="false"
+        placeholder="뉴스 기사 본문, 블로그 글, 메모를 그대로 붙여넣으세요.&#10;첫 줄은 제목으로 자동 인식됩니다."></textarea>
+      <div class="row-between">
+        <span id="charCount" class="char">0자</span>
+        <div id="sampleRow" class="chips">
+          <span class="chips-label">예시</span>
+          <button data-sample="ai">AI 툴</button>
+          <button data-sample="econ">경제 뉴스</button>
+          <button data-sample="marketing">마케팅</button>
+        </div>
+      </div>
+      <button id="generateBtn" class="btn-generate">
+        <span class="g-icon">✨</span>
+        <span class="g-txt">카드뉴스 5~7장 자동 생성</span>
+      </button>
+      <p class="hint">문단 흐름 · 문장 길이 · 핵심 숫자를 분석해 <b>표지 → 핵심 카드 → 마무리 CTA</b>로 나눕니다.</p>
+    </section>
+
+    <section class="block">
+      <div class="block-head"><h2><span class="step">2</span> 스타일</h2></div>
+
+      <div class="field">
+        <label class="lbl">비율</label>
+        <div class="seg" id="ratioSeg">
+          <button data-ratio="4:5" class="on"><b>4:5</b><span>인스타 피드</span></button>
+          <button data-ratio="9:16"><b>9:16</b><span>쇼츠·릴스</span></button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="lbl">카드 수</label>
+        <div class="seg seg-4" id="countSeg">
+          <button data-count="0" class="on">자동</button>
+          <button data-count="5">5장</button>
+          <button data-count="6">6장</button>
+          <button data-count="7">7장</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="lbl">내 인스타 아이디 <span class="lbl-note">모든 카드 워터마크</span></label>
+        <div class="input-prefix">
+          <span>@</span>
+          <input id="handleInput" type="text" placeholder="your_id" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="lbl">테마 <span class="lbl-note">클릭하면 바로 바뀝니다</span></label>
+        <div class="themes" id="themeGrid"></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <div class="block-head"><h2><span class="step">3</span> 카드 편집</h2><span id="cardCountLabel" class="count-pill"></span></div>
+      <div id="cardEditor" class="editor"></div>
+    </section>
+
+    <footer class="panel-foot">
+      <p>설치 없이 브라우저에서 바로 · 서버 전송 없음 (모든 처리는 내 기기에서)</p>
+    </footer>
+  </aside>
+
+  <!-- ================= 오른쪽 스테이지 ================= -->
+  <section class="stage">
+    <div class="stage-head">
+      <div>
+        <h2>미리보기</h2>
+        <p id="stageMeta">—</p>
+      </div>
+      <div class="stage-note">카드를 누르면 크게 볼 수 있어요</div>
+    </div>
+    <div id="previewGrid" class="preview-grid"></div>
+  </section>
+
+</main>
+
+<!-- 확대 모달 -->
+<div id="zoomModal" class="zoom-modal">
+  <div class="zoom-inner">
+    <div class="zoom-head">
+      <span id="zoomTitle">카드</span>
+      <button id="zoomClose" aria-label="닫기">✕</button>
+    </div>
+    <canvas id="zoomCanvas"></canvas>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="render.js"></script>
+<script src="zip.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
